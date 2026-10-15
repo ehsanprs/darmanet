@@ -51,6 +51,23 @@ or from the `NESHAN_API_KEY` environment variable.
 | `site/data/centers.js` | Same data wrapped for `file://` use; loaded by the page |
 | `site/data/darmanet_all_provinces.xlsx` | Full Excel export (linked in the site footer) |
 
+## Categories and services
+
+The source's broad types are mapped to visitor-oriented categories in `categories.py`
+(دندانپزشکی, آزمایشگاه, تصویربرداری, درمانگاه و مطب, فیزیوتراپی و توانبخشی, داروخانه,
+بیمارستان, قلب و عروق, چشم و بینایی, مغز و اعصاب, گوارش و آندوسکوپی, جراحی محدود,
+اورژانس, پرستاری در منزل). Specific services (سونوگرافی, MRI, اکو, نوار عصب, ارتودنسی, ...)
+are detected from each center's name and description with keyword rules, and a center can
+appear in several categories (e.g. a درمانگاه offering اکو is also under قلب و عروق).
+"شبانه‌روزی" centers are flagged too.
+
+- Tags are rebuilt on every `update_data.bat` run; review `tag_report.txt` (counts and
+  examples per service) after changing rules.
+- Fix individual centers in `overrides.json` (by `id`), then re-tag without scraping:
+  `.venv\Scripts\python categories.py`.
+- The website reads the category/service labels and search synonyms from `taxonomy`
+  in `centers.json`, so new services only need a rule in `categories.py`.
+
 ## Data cleaning
 
 - The source repeats every record (about half the pages are duplicates); duplicates are removed.

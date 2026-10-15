@@ -1,0 +1,8 @@
+{
+  "_help": "Manual fixes by center id (the id field in site/data/centers.json). Each listed field replaces the automatic value. After editing, run: .venv/Scripts/python categories.py",
+  "_example_0123456789": {
+    "categories": ["imaging"],
+    "services": ["ultrasound", "mammography"],
+    "allDay": false
+  }
+}

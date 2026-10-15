@@ -7,3 +7,4 @@ __pycache__/
 # Local secrets (Neshan API key) - never commit
 .env
 *.tmp
+tag_report.txt

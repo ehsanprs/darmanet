@@ -21,7 +21,8 @@ import hashlib
 import re
 import sys
 
-from db import DATA_DIR, load, save, today
+from categories import apply_tags, taxonomy
+from db import DATA_DIR, ROOT, load, save, today
 from scrape_darmanet import BASE, CACHE, scrape, write_excel
 
 # The source data has a few city names in the province column.
@@ -171,6 +172,14 @@ def merge(old_centers, scraped):
     return merged, {"added": added, "deleted": removed, "restored": restored}
 
 
+def retag(db):
+    """Add categories/services to every center and write the review report."""
+    report = apply_tags(db["centers"], ROOT / "overrides.json")
+    db["taxonomy"] = taxonomy()
+    (ROOT / "tag_report.txt").write_text(report, encoding="utf-8")
+    print("Categories updated; see tag_report.txt to review them.")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--cached", action="store_true",
@@ -191,6 +200,7 @@ def main():
                  "Re-run with --force to write anyway.")
 
     db["centers"], stats = merge(db["centers"], scraped)
+    retag(db)
     db["meta"].update({
         "updated": dt.datetime.now().isoformat(timespec="minutes"),
         "source": BASE,

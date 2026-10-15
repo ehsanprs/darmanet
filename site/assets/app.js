@@ -32,33 +32,24 @@
     search: "M4 11a7 7 0 1 0 14 0 7 7 0 1 0-14 0m16.5 9.5L16 16",
     x: "M6 6l12 12M18 6 6 18",
     grid: "M4 4h6v6H4zm10 0h6v6h-6zM4 14h6v6H4zm10 0h6v6h-6z",
+    bolt: "M13 2 4 14h7l-1 8 9-12h-7z",
   };
 
-  const TYPE_STYLE = {
-    "دندانپزشکی": ["tooth", "#0891b2"],
-    "آزمایشگاه": ["flask", "#7c3aed"],
-    "فیزیوتراپی": ["activity", "#16a34a"],
-    "تصویربرداری": ["scan", "#2563eb"],
-    "درمانگاه": ["stetho", "#0d9488"],
-    "داروخانه": ["pill", "#db2777"],
-    "بیمارستان": ["hospital", "#dc2626"],
-    "عینک سازی": ["glasses", "#9333ea"],
-    "بخش گوارش (آندوسکوپی و کولونوسکوپی)": ["endo", "#ca8a04"],
-    "بخش گوارش (آندوسکوپی)": ["endo", "#ca8a04"],
-    "کلینیک": ["clinic", "#0f766e"],
-    "مرکز جراحی محدود": ["scissors", "#475569"],
-    "کلینیک قلب": ["heart", "#e11d48"],
-    "خدمات اورژانس": ["siren", "#ea580c"],
-    "مطب": ["doctor", "#4f46e5"],
-    "خدمات پرستاری در منزل": ["homecare", "#65a30d"],
-  };
+  // Categories and services, from db.taxonomy (built by categories.py).
+  let CATS = [];
+  const CAT = new Map();
+  const SVC = new Map(); // service key -> { label, cat }
+  // Categories where a center without a specific service is worth flagging.
+  const FLAG_UNSPECIFIED = new Set(["imaging"]);
+  const catStyle = (key) => CAT.get(key) || { icon: "clinic", color: "#0f766e", label: "" };
 
   const $ = (id) => document.getElementById(id);
   const el = {
     q: $("q"), clearQ: $("clearQ"), province: $("province"), city: $("city"),
-    typeChips: $("typeChips"), typeList: $("typeList"), insuranceList: $("insuranceList"),
-    onlineOnly: $("onlineOnly"), phoneOnly: $("phoneOnly"),
-    onlineCount: $("onlineCount"), phoneCount: $("phoneCount"),
+    typeChips: $("typeChips"), serviceChips: $("serviceChips"), typeList: $("typeList"),
+    insuranceList: $("insuranceList"),
+    onlineOnly: $("onlineOnly"), phoneOnly: $("phoneOnly"), allDayOnly: $("allDayOnly"),
+    onlineCount: $("onlineCount"), phoneCount: $("phoneCount"), allDayCount: $("allDayCount"),
     resultCount: $("resultCount"), activeFilters: $("activeFilters"),
     cards: $("cards"), sentinel: $("sentinel"), empty: $("empty"),
     sort: $("sort"), filters: $("filters"), backdrop: $("backdrop"),
@@ -146,20 +137,26 @@
 
   // ---------- State ----------
   const state = {
-    q: "", province: "", city: "", types: new Set(), ins: "",
-    online: false, phone: false, sort: "relevance",
+    q: "", province: "", city: "", cat: "", svcs: new Set(), ins: "",
+    online: false, phone: false, allDay: false, sort: "relevance",
   };
   let items = [];
   let filtered = [];
   let rendered = 0;
   let tokens = [];
+  const globalSvc = new Map();
+  // Service names/synonyms as whole phrases -> a marker token stored on tagged centers,
+  // so «ام آر آی» means MRI instead of three short words matching everywhere.
+  let synonyms = [];
 
   function readUrl() {
     const p = new URLSearchParams(location.search);
     state.q = p.get("q") || "";
     state.province = p.get("p") || "";
     state.city = p.get("c") || "";
-    state.types = new Set((p.get("t") || "").split("|").filter(Boolean));
+    state.cat = CAT.has(p.get("cat")) ? p.get("cat") : "";
+    state.svcs = new Set((p.get("sv") || "").split("|").filter((k) => SVC.has(k) && SVC.get(k).cat === state.cat));
+    state.allDay = p.get("h") === "1";
     state.ins = p.get("i") || "";
     state.online = p.get("o") === "1";
     state.phone = p.get("ph") === "1";
@@ -174,7 +171,9 @@
     if (state.q) p.set("q", state.q);
     if (state.province) p.set("p", state.province);
     if (state.city) p.set("c", state.city);
-    if (state.types.size) p.set("t", [...state.types].join("|"));
+    if (state.cat) p.set("cat", state.cat);
+    if (state.svcs.size) p.set("sv", [...state.svcs].join("|"));
+    if (state.allDay) p.set("h", "1");
     if (state.ins) p.set("i", state.ins);
     if (state.online) p.set("o", "1");
     if (state.phone) p.set("ph", "1");
@@ -186,15 +185,34 @@
 
   // ---------- Data ----------
   function prepare(db) {
+    CATS = db.taxonomy || [];
+    CATS.forEach((c) => {
+      CAT.set(c.key, c);
+      c.services.forEach((s) => SVC.set(s.key, { ...s, cat: c.key }));
+    });
     // Centers no longer listed on the source stay in the database, marked deleted.
     items = db.centers.filter((c) => !c.deleted).map((c) => {
       const phoneSearch = c.phones.map((n) => `${n} ${n.slice(1)} ${n.slice(3)}`).join(" ");
+      const cats = c.categories || [];
+      const svcs = (c.services || []).filter((k) => SVC.has(k));
+      // Category/service names and synonyms make searches like «ام آر آی» or «اکو» work.
+      const tagWords = cats.map((k) => catStyle(k).label)
+        .concat(svcs.flatMap((k) => [SVC.get(k).label, ...SVC.get(k).syn]))
+        .concat(c.allDay ? ["شبانه روزی", "24 ساعته"] : [])
+        .concat(svcs.map((k) => `§${k}`));
       return Object.assign(c, {
         _name: normalize(c.name),
-        _s: normalize([c.name, c.type, c.province, c.city, c.address, c.postalCode, c.note, c.phoneText].join(" ")) + " " + phoneSearch,
+        _s: normalize([c.name, c.type, c.province, c.city, c.address, c.postalCode, c.note, c.phoneText, ...tagWords].join(" ")) + " " + phoneSearch,
         _ins: new Set(c.insurance || []),
+        _cats: new Set(cats),
+        _svcs: new Set(svcs),
       });
     });
+    items.forEach((it) => it._svcs.forEach((k) => globalSvc.set(k, (globalSvc.get(k) || 0) + 1)));
+    synonyms = [...SVC.values()]
+      .flatMap((sv) => [sv.label, ...sv.syn].map((w) => [normalize(w), `§${sv.key}`]))
+      .filter(([w]) => w)
+      .sort((a, b) => b[0].length - a[0].length);
     const d = new Date(db.meta.updated);
     el.updated.textContent = isNaN(d) ? db.meta.updated
       : new Intl.DateTimeFormat("fa-IR", { dateStyle: "long" }).format(d);
@@ -209,10 +227,14 @@
 
   // ---------- Filtering ----------
   function apply() {
-    tokens = normalize(state.q).split(" ").filter(Boolean);
+    let query = ` ${normalize(state.q)} `;
+    for (const [phrase, marker] of synonyms) {
+      if (query.includes(` ${phrase} `)) query = query.replace(` ${phrase} `, ` ${marker} `);
+    }
+    tokens = query.split(" ").filter(Boolean);
     const counts = {
-      province: new Map(), city: new Map(), type: new Map(),
-      ins: new Map(), insAll: 0, online: 0, phone: 0,
+      province: new Map(), city: new Map(), cat: new Map(), svc: new Map(),
+      ins: new Map(), insAll: 0, online: 0, phone: 0, allDay: 0, catAll: 0,
     };
     const out = [];
 
@@ -229,24 +251,33 @@
 
       const fp = !state.province || it.province === state.province;
       const fc = !state.city || it.city === state.city;
-      const ft = !state.types.size || state.types.has(it.type);
+      const fcat = !state.cat || it._cats.has(state.cat);
+      let fsv = !state.svcs.size;
+      if (!fsv) for (const k of state.svcs) if (it._svcs.has(k)) { fsv = true; break; }
+      const ft = fcat && fsv;
       const fi = !state.ins || it._ins.has(state.ins);
       const fo = !state.online || it.onlineReferral === true;
       const fph = !state.phone || it.phones.length > 0;
-      const rest = fi && fo && fph;
+      const fh = !state.allDay || it.allDay;
+      const rest = fi && fo && fph && fh;
 
       if (ft && rest) {
         counts.province.set(it.province, (counts.province.get(it.province) || 0) + 1);
         if (fp) counts.city.set(it.city, (counts.city.get(it.city) || 0) + 1);
       }
       if (fp && fc) {
-        if (rest) counts.type.set(it.type, (counts.type.get(it.type) || 0) + 1);
-        if (ft && fo && fph) {
+        if (rest) {
+          counts.catAll++;
+          for (const k of it._cats) counts.cat.set(k, (counts.cat.get(k) || 0) + 1);
+          if (fcat) for (const k of it._svcs) counts.svc.set(k, (counts.svc.get(k) || 0) + 1);
+        }
+        if (ft && fo && fph && fh) {
           counts.insAll++;
           for (const k of it._ins) counts.ins.set(k, (counts.ins.get(k) || 0) + 1);
         }
-        if (ft && fi && fph && it.onlineReferral === true) counts.online++;
-        if (ft && fi && fo && it.phones.length) counts.phone++;
+        if (ft && fi && fph && fh && it.onlineReferral === true) counts.online++;
+        if (ft && fi && fo && fh && it.phones.length) counts.phone++;
+        if (ft && fi && fo && fph && it.allDay) counts.allDay++;
         if (ft && rest) out.push(it);
       }
     }
@@ -284,31 +315,41 @@
       el.city.innerHTML = `<option value="">ابتدا استان را انتخاب کنید</option>`;
     }
 
-    // Type chips, ordered by overall popularity so positions stay stable.
-    if (!renderFacets.typeOrder) {
-      const m = new Map();
-      items.forEach((i) => m.set(i.type, (m.get(i.type) || 0) + 1));
-      renderFacets.typeOrder = [...m.entries()].sort((a, b) => b[1] - a[1]).map((e) => e[0]);
-    }
-    const typeTotal = [...c.type.values()].reduce((a, b) => a + b, 0);
+    // Category chips (pick one), then the chosen category's service chips (pick any).
+    const catAll = c.catAll;
     el.typeChips.innerHTML =
-      `<button type="button" class="chip" data-type="" aria-pressed="${!state.types.size}">${icon("grid")}همه <span class="n">${faNum(typeTotal)}</span></button>` +
-      renderFacets.typeOrder.map((t) => {
-        const [ic, color] = TYPE_STYLE[t] || ["clinic", "#0f766e"];
-        const n = c.type.get(t) || 0;
-        const on = state.types.has(t);
-        return `<button type="button" class="chip" style="--chip-c:${color}" data-type="${escapeHtml(t)}" aria-pressed="${on}"${!n && !on ? ' data-zero=""' : ""}>${icon(ic)}${escapeHtml(t)} <span class="n">${faNum(n)}</span></button>`;
+      `<button type="button" class="chip" data-cat="" aria-pressed="${!state.cat}">${icon("grid")}همه <span class="n">${faNum(catAll)}</span></button>` +
+      CATS.map((cat) => {
+        const n = c.cat.get(cat.key) || 0;
+        const on = state.cat === cat.key;
+        return `<button type="button" class="chip" style="--chip-c:${cat.color}" data-cat="${cat.key}" aria-pressed="${on}"${!n && !on ? ' data-zero=""' : ""}>${icon(cat.icon)}${escapeHtml(cat.label)} <span class="n">${faNum(n)}</span></button>`;
       }).join("");
 
-    el.typeList.innerHTML = renderFacets.typeOrder.map((t) => {
-      const [ic, color] = TYPE_STYLE[t] || ["clinic", "#0f766e"];
-      const n = c.type.get(t) || 0;
-      const on = state.types.has(t);
-      return `<label class="opt${!n && !on ? " disabled" : ""}" style="--chip-c:${color}">
-          <input type="checkbox" value="${escapeHtml(t)}"${on ? " checked" : ""}>
-          ${icon(ic, "icon type-mini")}<span class="lbl">${escapeHtml(t)}</span><span class="count">${faNum(n)}</span>
+    const cat = CAT.get(state.cat);
+    const svcs = cat ? cat.services.filter((s) => globalSvc.get(s.key)) : [];
+    el.serviceChips.hidden = svcs.length < 2;
+    el.serviceChips.style.setProperty("--chip-c", cat ? cat.color : "");
+    el.serviceChips.innerHTML = svcs.length < 2 ? "" :
+      `<span class="sub-label">خدمت:</span>` +
+      svcs.map((s) => {
+        const n = c.svc.get(s.key) || 0;
+        const on = state.svcs.has(s.key);
+        return `<button type="button" class="chip" data-svc="${s.key}" aria-pressed="${on}"${!n && !on ? ' data-zero=""' : ""}>${escapeHtml(s.label)} <span class="n">${faNum(n)}</span></button>`;
+      }).join("");
+
+    revealActive(el.typeChips);
+    revealActive(el.serviceChips);
+
+    el.typeList.innerHTML =
+      `<label class="opt"><input type="radio" name="cat" value=""${!state.cat ? " checked" : ""}>${icon("grid", "icon type-mini")}<span class="lbl">همه</span><span class="count">${faNum(catAll)}</span></label>` +
+      CATS.map((cat) => {
+        const n = c.cat.get(cat.key) || 0;
+        const on = state.cat === cat.key;
+        return `<label class="opt${!n && !on ? " disabled" : ""}" style="--chip-c:${cat.color}">
+          <input type="radio" name="cat" value="${cat.key}"${on ? " checked" : ""}>
+          ${icon(cat.icon, "icon type-mini")}<span class="lbl">${escapeHtml(cat.label)}</span><span class="count">${faNum(n)}</span>
         </label>`;
-    }).join("");
+      }).join("");
 
     el.insuranceList.innerHTML =
       [{ key: "", label: "همه (بدون فیلتر بیمه)", n: c.insAll }]
@@ -319,11 +360,24 @@
             <span class="lbl">${escapeHtml(o.label)}</span><span class="count">${faNum(o.n)}</span>
           </label>`).join("");
 
+    el.allDayOnly.checked = state.allDay;
+    el.allDayCount.textContent = `(${faNum(c.allDay)})`;
     el.onlineOnly.checked = state.online;
     el.phoneOnly.checked = state.phone;
     el.onlineCount.textContent = `(${faNum(c.online)})`;
     el.phoneCount.textContent = `(${faNum(c.phone)})`;
     el.sort.value = state.sort;
+  }
+
+  // On narrow screens the chip rows scroll sideways; keep the selected chip in view.
+  function revealActive(row) {
+    const chip = row.querySelector('.chip[aria-pressed="true"][data-cat]:not([data-cat=""]), .chip[aria-pressed="true"][data-svc]');
+    if (!chip || row.scrollWidth <= row.clientWidth) return;
+    const rr = row.getBoundingClientRect();
+    const cr = chip.getBoundingClientRect();
+    if (cr.left < rr.left || cr.right > rr.right) {
+      row.scrollLeft += cr.left - rr.left - (rr.width - cr.width) / 2;
+    }
   }
 
   function renderActive() {
@@ -332,7 +386,9 @@
     if (state.q) add(`«${state.q}»`, () => { state.q = ""; el.q.value = ""; syncClear(); });
     if (state.province) add(state.province, () => { state.province = ""; state.city = ""; });
     if (state.city) add(state.city, () => { state.city = ""; });
-    state.types.forEach((t) => add(t, () => state.types.delete(t)));
+    if (state.cat) add(catStyle(state.cat).label, () => { state.cat = ""; state.svcs.clear(); });
+    state.svcs.forEach((k) => add(SVC.get(k).label, () => state.svcs.delete(k)));
+    if (state.allDay) add("شبانه‌روزی", () => { state.allDay = false; });
     if (state.ins) add(`بیمه ${state.ins}`, () => { state.ins = ""; });
     if (state.online) add("معرفی‌نامه آنلاین", () => { state.online = false; });
     if (state.phone) add("دارای تلفن", () => { state.phone = false; });
@@ -340,7 +396,8 @@
     el.activeFilters.innerHTML = pills.map((p, i) =>
       `<button type="button" class="pill" data-i="${i}" aria-label="حذف فیلتر ${escapeHtml(p.label)}">${escapeHtml(p.label)}${icon("x", "")}</button>`).join("");
 
-    const extra = state.types.size + (state.ins ? 1 : 0) + (state.online ? 1 : 0) + (state.phone ? 1 : 0);
+    const extra = (state.cat ? 1 : 0) + state.svcs.size + (state.ins ? 1 : 0) +
+      (state.online ? 1 : 0) + (state.phone ? 1 : 0) + (state.allDay ? 1 : 0);
     el.filterBadge.hidden = !extra;
     el.filterBadge.textContent = toFa(extra);
   }
@@ -355,10 +412,17 @@
 
   // ---------- Cards ----------
   function card(it) {
-    const [ic, color] = TYPE_STYLE[it.type] || ["clinic", "#0f766e"];
+    const primary = (it.categories || [])[0];
+    const { icon: ic, color } = catStyle(primary);
     const loc = it.city && it.city !== it.province ? `${it.province}، ${it.city}` : it.province;
 
     const tags = [];
+    const svcTags = [...it._svcs].map((k) => SVC.get(k));
+    svcTags.forEach((s) => tags.push(`<span class="tag svc" style="--chip-c:${catStyle(s.cat).color}">${escapeHtml(s.label)}</span>`));
+    if (FLAG_UNSPECIFIED.has(primary) && !svcTags.some((s) => s.cat === primary)) {
+      tags.push(`<span class="tag unknown" title="نوع خدمات این مرکز در منبع ذکر نشده است؛ تماس بگیرید">خدمات مشخص نشده</span>`);
+    }
+    if (it.allDay) tags.push(`<span class="tag ok">شبانه‌روزی</span>`);
     if (it.insurance === null) tags.push(`<span class="tag">بیمه پایه: نامشخص</span>`);
     else if (!it.insurance.length) tags.push(`<span class="tag warn">بدون قرارداد بیمه پایه</span>`);
     else INSURERS.forEach((i) => { if (it._ins.has(i.key)) tags.push(`<span class="tag ${i.cls}">${i.key}</span>`); });
@@ -405,10 +469,12 @@
 
   // ---------- Export ----------
   function exportCsv() {
-    const cols = ["نوع مرکز", "نام مرکز", "استان", "شهرستان", "تلفن", "آدرس", "کد پستی", "معرفی‌نامه آنلاین", "بیمه پایه", "توضیحات"];
+    const cols = ["نوع مرکز", "دسته‌بندی", "خدمات", "شبانه‌روزی", "نام مرکز", "استان", "شهرستان", "تلفن", "آدرس", "کد پستی", "معرفی‌نامه آنلاین", "بیمه پایه", "توضیحات"];
     const q = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const rows = filtered.map((it) => [
-      it.type, it.name, it.province, it.city,
+      it.type, [...it._cats].map((k) => catStyle(k).label).join("، "),
+      [...it._svcs].map((k) => SVC.get(k).label).join("، "), it.allDay ? "بله" : "",
+      it.name, it.province, it.city,
       it.phones.length ? it.phones.join(" / ") : it.phoneText,
       it.address, it.postalCode,
       it.onlineReferral == null ? "" : it.onlineReferral ? "دارد" : "ندارد",
@@ -478,25 +544,37 @@
   el.city.addEventListener("change", () => change(() => { state.city = el.city.value; }));
   el.sort.addEventListener("change", () => change(() => { state.sort = el.sort.value; }));
   el.onlineOnly.addEventListener("change", () => change(() => { state.online = el.onlineOnly.checked; }, !mobile.matches));
+  el.allDayOnly.addEventListener("change", () => change(() => { state.allDay = el.allDayOnly.checked; }, !mobile.matches));
   el.phoneOnly.addEventListener("change", () => change(() => { state.phone = el.phoneOnly.checked; }, !mobile.matches));
   el.insuranceList.addEventListener("change", (e) => change(() => { state.ins = e.target.value; }, !mobile.matches));
 
+  const selectCat = (key) => {
+    state.cat = state.cat === key ? "" : key;
+    state.svcs.clear();
+  };
   el.typeList.addEventListener("change", (e) => change(() => {
-    if (e.target.checked) state.types.add(e.target.value);
-    else state.types.delete(e.target.value);
+    state.cat = e.target.value;
+    state.svcs.clear();
   }, false));
 
   el.typeChips.addEventListener("click", (e) => {
     const b = e.target.closest(".chip");
     if (!b) return;
-    const t = b.dataset.type;
     const x = el.typeChips.scrollLeft;
-    change(() => {
-      if (!t) state.types.clear();
-      else if (state.types.has(t)) state.types.delete(t);
-      else state.types.add(t);
-    });
+    change(() => selectCat(b.dataset.cat));
     el.typeChips.scrollLeft = x;
+  });
+
+  el.serviceChips.addEventListener("click", (e) => {
+    const b = e.target.closest(".chip");
+    if (!b) return;
+    const x = el.serviceChips.scrollLeft;
+    change(() => {
+      const k = b.dataset.svc;
+      if (state.svcs.has(k)) state.svcs.delete(k);
+      else state.svcs.add(k);
+    });
+    el.serviceChips.scrollLeft = x;
   });
 
   el.activeFilters.addEventListener("click", (e) => {
@@ -505,8 +583,8 @@
   });
 
   const resetAll = () => change(() => {
-    Object.assign(state, { q: "", province: "", city: "", ins: "", online: false, phone: false });
-    state.types.clear();
+    Object.assign(state, { q: "", province: "", city: "", cat: "", ins: "", online: false, phone: false, allDay: false });
+    state.svcs.clear();
     el.q.value = "";
     syncClear();
   });

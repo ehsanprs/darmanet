@@ -51,7 +51,8 @@
 
   <nav class="types-bar" aria-label="نوع مرکز درمانی">
     <div class="container">
-      <div class="chips" id="typeChips" role="group"></div>
+      <div class="chips" id="typeChips" role="group" aria-label="دسته‌بندی"></div>
+      <div class="chips sub" id="serviceChips" role="group" aria-label="خدمت مورد نیاز" hidden></div>
     </div>
   </nav>
 
@@ -75,6 +76,11 @@
       <fieldset class="filter-group">
         <legend>خدمات</legend>
         <label class="switch">
+          <input type="checkbox" id="allDayOnly">
+          <span class="switch-track" aria-hidden="true"></span>
+          <span>شبانه‌روزی <span class="count" id="allDayCount"></span></span>
+        </label>
+        <label class="switch">
           <input type="checkbox" id="onlineOnly">
           <span class="switch-track" aria-hidden="true"></span>
           <span>دارای معرفی‌نامه آنلاین <span class="count" id="onlineCount"></span></span>
@@ -87,7 +93,7 @@
       </fieldset>
 
       <fieldset class="filter-group mobile-only">
-        <legend>نوع مرکز</legend>
+        <legend>دسته‌بندی</legend>
         <div class="check-list" id="typeList"></div>
       </fieldset>
 
