@@ -113,8 +113,12 @@
               <option value="relevance">مرتبط‌ترین</option>
               <option value="name">بر اساس نام</option>
               <option value="city">بر اساس شهر</option>
+              <option value="near">نزدیک‌ترین به من</option>
             </select>
           </label>
+          <button type="button" class="btn ghost small map-toggle" id="mapToggle" aria-pressed="false" title="نمایش مراکز روی نقشه">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2zM9 4v14m6-12v14"/></svg><span>نقشه</span>
+          </button>
           <button type="button" class="btn ghost small" id="exportCsv" title="دریافت نتایج فعلی به صورت فایل اکسل (CSV)">
             <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14"/></svg>
             <span>خروجی</span>
@@ -131,13 +135,31 @@
         <button type="button" class="btn primary" id="emptyReset">پاک کردن فیلترها</button>
       </div>
     </section>
+
+    <section class="map-panel" id="mapPanel" aria-label="نقشه مراکز" hidden>
+      <div class="map" id="map" dir="ltr"></div>
+      <div class="map-top">
+        <span class="map-count" id="mapCount" aria-live="polite"></span>
+        <button type="button" class="btn primary small search-area" id="searchArea" hidden>
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11a7 7 0 1 0 14 0 7 7 0 1 0-14 0m16.5 9.5L16 16"/></svg>
+          جستجو در این محدوده
+        </button>
+      </div>
+      <div class="map-preview" id="mapPreview" hidden></div>
+    </section>
   </main>
 
-  <button type="button" class="fab" id="openFilters" aria-controls="filters">
-    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
-    <span>فیلترها</span>
-    <span class="fab-badge" id="filterBadge" hidden></span>
-  </button>
+  <div class="fab-bar">
+    <button type="button" class="fab" id="openFilters" aria-controls="filters">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
+      <span>فیلترها</span>
+      <span class="fab-badge" id="filterBadge" hidden></span>
+    </button>
+    <button type="button" class="fab" id="mapToggleMobile" aria-controls="mapPanel">
+      <span class="when-list"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2zM9 4v14m6-12v14"/></svg>نقشه</span>
+      <span class="when-map"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>فهرست</span>
+    </button>
+  </div>
 
   <footer class="site-footer">
     <div class="container">

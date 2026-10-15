@@ -29,6 +29,7 @@
     phone: "M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2",
     copy: "M9 9h11v11H9zM5 15H4V4h11v1",
     nav: "M3 11 21 3l-8 18-2-8z",
+    map: "M9 4 3 6v14l6-2 6 2 6-2V4l-6 2zM9 4v14m6-12v14",
     search: "M4 11a7 7 0 1 0 14 0 7 7 0 1 0-14 0m16.5 9.5L16 16",
     x: "M6 6l12 12M18 6 6 18",
     grid: "M4 4h6v6H4zm10 0h6v6h-6zM4 14h6v6H4zm10 0h6v6h-6z",
@@ -57,6 +58,8 @@
     applyFilters: $("applyFilters"), resetAll: $("resetAll"), emptyReset: $("emptyReset"),
     filterBadge: $("filterBadge"), exportCsv: $("exportCsv"), updated: $("updated"),
     toast: $("toast"), results: $("results"),
+    mapToggle: $("mapToggle"), mapToggleMobile: $("mapToggleMobile"), mapPanel: $("mapPanel"),
+    mapEl: $("map"), mapCount: $("mapCount"), searchArea: $("searchArea"), mapPreview: $("mapPreview"),
   };
 
   // ---------- Helpers ----------
@@ -139,9 +142,13 @@
   const state = {
     q: "", province: "", city: "", cat: "", svcs: new Set(), ins: "",
     online: false, phone: false, allDay: false, sort: "relevance",
+    map: false, bounds: null, near: null,
   };
   let items = [];
   let filtered = [];
+  let mapItems = []; // matches every filter except the map area
+  let listSig = "";
+  const byId = new Map();
   let rendered = 0;
   let tokens = [];
   const globalSvc = new Map();
@@ -161,6 +168,10 @@
     state.online = p.get("o") === "1";
     state.phone = p.get("ph") === "1";
     state.sort = p.get("s") || "relevance";
+    if (state.sort === "near" && !state.near) state.sort = "relevance";
+    state.map = p.get("m") === "1";
+    const mv = (p.get("mv") || "").split(",").map(Number);
+    pendingView = mv.length === 3 && mv.every(Number.isFinite) ? mv : null;
     if (![...p.keys()].length) {
       try { state.province = localStorage.getItem("darmanet.province") || ""; } catch (e) { /* storage unavailable */ }
     }
@@ -177,7 +188,14 @@
     if (state.ins) p.set("i", state.ins);
     if (state.online) p.set("o", "1");
     if (state.phone) p.set("ph", "1");
-    if (state.sort !== "relevance") p.set("s", state.sort);
+    if (state.sort !== "relevance" && state.sort !== "near") p.set("s", state.sort);
+    if (state.map) {
+      p.set("m", "1");
+      if (mapState.map) {
+        const c = mapState.map.getCenter();
+        p.set("mv", `${c.lat.toFixed(4)},${c.lng.toFixed(4)},${mapState.map.getZoom()}`);
+      }
+    }
     const qs = p.toString();
     history.replaceState(null, "", qs ? `?${qs}` : location.pathname);
     try { localStorage.setItem("darmanet.province", state.province); } catch (e) { /* storage unavailable */ }
@@ -209,6 +227,7 @@
       });
     });
     items.forEach((it) => it._svcs.forEach((k) => globalSvc.set(k, (globalSvc.get(k) || 0) + 1)));
+    items.forEach((it) => byId.set(it.id, it));
     synonyms = [...SVC.values()]
       .flatMap((sv) => [sv.label, ...sv.syn].map((w) => [normalize(w), `§${sv.key}`]))
       .filter(([w]) => w)
@@ -248,6 +267,7 @@
       }
       if (!fq) continue;
       it._score = score;
+      it._dist = state.near && it.location ? distanceKm(state.near, it.location) : Infinity;
 
       const fp = !state.province || it.province === state.province;
       const fc = !state.city || it.city === state.city;
@@ -283,11 +303,18 @@
     }
 
     sortItems(out);
-    filtered = out;
+    mapItems = out;
+    filtered = state.bounds ? out.filter((it) => inBounds(it, state.bounds)) : out;
     renderFacets(counts);
     renderActive();
     renderCount();
-    resetCards();
+    // Panning the map often leaves the same results; keep the list (and its scroll) then.
+    const sig = filtered.map((it) => it.id).join(",") + "|" + state.sort;
+    if (sig !== listSig) {
+      listSig = sig;
+      resetCards();
+    }
+    if (state.map && mapState.map) syncMarkers();
     writeUrl();
   }
 
@@ -295,6 +322,7 @@
     const s = state.sort;
     if (s === "name") arr.sort((a, b) => collator.compare(a.name, b.name));
     else if (s === "city") arr.sort((a, b) => collator.compare(a.province, b.province) || collator.compare(a.city, b.city) || collator.compare(a.name, b.name));
+    else if (s === "near" && state.near) arr.sort((a, b) => a._dist - b._dist);
     else if (tokens.length) arr.sort((a, b) => b._score - a._score || collator.compare(a.name, b.name));
   }
 
@@ -389,6 +417,7 @@
     if (state.cat) add(catStyle(state.cat).label, () => { state.cat = ""; state.svcs.clear(); });
     state.svcs.forEach((k) => add(SVC.get(k).label, () => state.svcs.delete(k)));
     if (state.allDay) add("شبانه‌روزی", () => { state.allDay = false; });
+    if (state.bounds && mobile.matches) add("محدوده انتخاب‌شده روی نقشه", () => { state.bounds = null; });
     if (state.ins) add(`بیمه ${state.ins}`, () => { state.ins = ""; });
     if (state.online) add("معرفی‌نامه آنلاین", () => { state.online = false; });
     if (state.phone) add("دارای تلفن", () => { state.phone = false; });
@@ -404,7 +433,9 @@
 
   function renderCount() {
     const n = filtered.length;
-    el.resultCount.innerHTML = n ? `<b>${faNum(n)}</b> مرکز درمانی یافت شد` : "نتیجه‌ای یافت نشد";
+    el.resultCount.innerHTML = !n ? "نتیجه‌ای یافت نشد"
+      : state.bounds ? `<b>${faNum(n)}</b> مرکز در محدوده نقشه <span class="muted">(از ${faNum(mapItems.length)})</span>`
+      : `<b>${faNum(n)}</b> مرکز درمانی یافت شد`;
     el.applyFilters.textContent = n ? `نمایش ${faNum(n)} نتیجه` : "نتیجه‌ای یافت نشد";
     el.empty.hidden = n > 0;
     el.exportCsv.disabled = !n;
@@ -434,12 +465,12 @@
       ? `<span class="phone-raw">${toFa(escapeHtml(it.phoneText))}</span>` : "";
     const googleQ = encodeURIComponent(`${it.type} ${it.name} ${it.city}`);
 
-    return `<article class="card" style="--chip-c:${color}">
+    return `<article class="card" data-id="${it.id}" style="--chip-c:${color}">
       <div class="card-top">
         <span class="type-icon">${icon(ic)}</span>
         <div class="card-title">
           <h3>${highlight(it.name, tokens)}</h3>
-          <div class="card-sub"><span class="type-name">${escapeHtml(it.type)}</span><span class="sep">•</span><span>${escapeHtml(loc)}</span></div>
+          <div class="card-sub"><span class="type-name">${escapeHtml(it.type)}</span><span class="sep">•</span><span>${escapeHtml(loc)}</span>${it._dist < Infinity ? `<span class="sep">•</span><span class="dist">${fmtKm(it._dist)}</span>` : ""}</div>
         </div>
       </div>
       ${it.address ? `<p class="address">${icon("pin")}<span>${highlight(it.address, tokens)}${it.postalCode ? ` <span class="postal">· کد پستی ${toFa(it.postalCode)}</span>` : ""}</span></p>` : ""}
@@ -448,6 +479,7 @@
       <div class="actions">
         ${calls}${rawPhone}
         ${navMenu(it)}
+        ${it.location ? `<button type="button" class="btn ghost" data-locate="${it.id}">${icon("map")}روی نقشه</button>` : ""}
         <a class="btn ghost" href="https://www.google.com/search?q=${googleQ}" target="_blank" rel="noopener" title="جستجوی این مرکز در گوگل (نقشه، نظرات، ساعت کاری)">${icon("search")}جستجو در گوگل</a>
         ${it.address ? `<button type="button" class="btn ghost" data-copy="${escapeHtml(it.address)}" title="کپی آدرس">${icon("copy")}کپی آدرس</button>` : ""}
       </div>
@@ -522,6 +554,307 @@
     el.openFilters.focus();
   }
 
+  // ---------- Map ----------
+  // Leaflet is loaded only when the map is first opened, so the list stays fast.
+  const mapState = {
+    map: null, cluster: null, markers: new Map(), sig: null,
+    programmatic: false, needFit: false, user: null, loading: null, highlighted: null,
+  };
+  let pendingView = null;
+
+  function loadAsset(tag, attrs) {
+    return new Promise((resolve, reject) => {
+      const node = Object.assign(document.createElement(tag), attrs);
+      node.onload = resolve;
+      node.onerror = reject;
+      document.head.appendChild(node);
+    });
+  }
+
+  function loadLeaflet() {
+    mapState.loading = mapState.loading || Promise.all([
+      loadAsset("link", { rel: "stylesheet", href: "assets/vendor/leaflet.min.css" }),
+      loadAsset("link", { rel: "stylesheet", href: "assets/vendor/MarkerCluster.css" }),
+      loadAsset("script", { src: "assets/vendor/leaflet.min.js" }),
+    ]).then(() => loadAsset("script", { src: "assets/vendor/leaflet.markercluster.js" }));
+    return mapState.loading;
+  }
+
+  const filterSig = () => [state.q, state.province, state.city, state.cat, [...state.svcs].join(","),
+    state.ins, state.online, state.phone, state.allDay].join("|");
+
+  function mapBounds() {
+    const b = mapState.map.getBounds();
+    return { s: b.getSouth(), w: b.getWest(), n: b.getNorth(), e: b.getEast() };
+  }
+
+  const inBounds = (it, b) => it.location && it.location.lat >= b.s && it.location.lat <= b.n &&
+    it.location.lng >= b.w && it.location.lng <= b.e;
+
+  // Moves made by the code (fit to results, near me) should not count as the user exploring.
+  function moveMap(fn) {
+    mapState.programmatic = true;
+    fn(mapState.map);
+    setTimeout(() => { mapState.programmatic = false; }, 900);
+  }
+
+  function initMap() {
+    const L = window.L;
+    const map = L.map(el.mapEl, { zoomSnap: 0.5 }).setView([32.4, 53.7], 5);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
+    }).addTo(map);
+    map.attributionControl.setPrefix(false);
+
+    const cluster = L.markerClusterGroup({
+      chunkedLoading: true, showCoverageOnHover: false, maxClusterRadius: 50,
+      iconCreateFunction: (group) => {
+        const n = group.getChildCount();
+        const big = n >= 100;
+        return L.divIcon({
+          className: "pin-wrap", iconSize: big ? [48, 48] : [40, 40],
+          html: `<div class="cluster${big ? " lg" : ""}">${faNum(n)}</div>`,
+        });
+      },
+    });
+    map.addLayer(cluster);
+
+    const Locate = L.Control.extend({
+      options: { position: "topleft" },
+      onAdd() {
+        const b = L.DomUtil.create("button", "locate-btn leaflet-bar");
+        b.type = "button";
+        b.title = "نزدیک من";
+        b.setAttribute("aria-label", "نزدیک من");
+        b.innerHTML = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/></svg>';
+        L.DomEvent.disableClickPropagation(b);
+        L.DomEvent.on(b, "click", () => locateMe());
+        return b;
+      },
+    });
+    map.addControl(new Locate());
+
+    map.on("moveend", onMapMove);
+    map.on("click", hidePreview);
+    mapState.map = map;
+    mapState.cluster = cluster;
+  }
+
+  function onMapMove() {
+    if (!state.map) return;
+    if (!mobile.matches) {
+      // Desktop: the list always shows what is inside the map.
+      state.bounds = mapBounds();
+      apply();
+    } else if (!mapState.programmatic) {
+      el.searchArea.hidden = false;
+    }
+    writeUrl();
+  }
+
+  function makeMarker(it) {
+    const L = window.L;
+    const { icon: ic, color } = catStyle((it.categories || [])[0]);
+    const approx = it.geocode && it.geocode.approx;
+    const marker = L.marker([it.location.lat, it.location.lng], {
+      title: it.name,
+      icon: L.divIcon({
+        className: "pin-wrap", iconSize: [30, 30], iconAnchor: [15, 36], popupAnchor: [0, -34],
+        html: `<div class="pin${approx ? " approx" : ""}" style="--pin:${color}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS[ic] || ICONS.clinic}"/></svg></div>`,
+      }),
+    });
+    marker.on("click", () => openCenter(it, marker, true));
+    return marker;
+  }
+
+  function syncMarkers() {
+    const sig = filterSig();
+    if (sig !== mapState.sig) {
+      mapState.sig = sig;
+      mapState.cluster.clearLayers();
+      const layers = [];
+      for (const it of mapItems) {
+        if (!it.location) continue;
+        if (!mapState.markers.has(it.id)) mapState.markers.set(it.id, makeMarker(it));
+        layers.push(mapState.markers.get(it.id));
+      }
+      mapState.cluster.addLayers(layers);
+    }
+    if (mapState.needFit) {
+      mapState.needFit = false;
+      fitToResults();
+    }
+    updateMapCount();
+  }
+
+  function fitToResults() {
+    const pts = mapItems.filter((it) => it.location).map((it) => [it.location.lat, it.location.lng]);
+    if (!pts.length) return;
+    moveMap((m) => (pts.length === 1 ? m.setView(pts[0], 15) : m.fitBounds(pts, { padding: [40, 40], maxZoom: 15 })));
+  }
+
+  function updateMapCount() {
+    if (!state.map) return;
+    el.mapCount.textContent = state.bounds
+      ? `${faNum(filtered.length)} مرکز در این محدوده`
+      : `${faNum(mapItems.filter((it) => it.location).length)} مرکز روی نقشه`;
+  }
+
+  function popupHtml(it) {
+    const ll = `${it.location.lat},${it.location.lng}`;
+    const phone = it.phones[0];
+    return `<div class="pop">
+        <h4>${escapeHtml(it.name)}</h4>
+        <div class="muted">${escapeHtml(it.type)} · ${escapeHtml(it.city)}${it._dist < Infinity ? ` · <span class="dist">${fmtKm(it._dist)}</span>` : ""}</div>
+        ${it.geocode && it.geocode.approx ? '<div class="muted">موقعیت تقریبی است</div>' : ""}
+        <div class="pop-actions">
+          ${phone ? `<a class="call" href="tel:${phone}">تماس ${toFa(formatPhone(phone))}</a>` : ""}
+          <a class="ghost" href="https://www.google.com/maps/dir/?api=1&destination=${ll}" target="_blank" rel="noopener">مسیریابی</a>
+        </div>
+      </div>`;
+  }
+
+  function openCenter(it, marker, fromMap) {
+    if (mobile.matches) {
+      showPreview(it);
+      return;
+    }
+    marker.unbindPopup();
+    marker.bindPopup(popupHtml(it), { maxWidth: 300 }).openPopup();
+    if (fromMap) {
+      // Load more of the list until the clicked center's card exists, then show it.
+      const idx = filtered.indexOf(it);
+      while (idx >= rendered && rendered < filtered.length) renderMore();
+      const cardEl = el.cards.querySelector(`.card[data-id="${it.id}"]`);
+      if (cardEl) {
+        cardEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        cardEl.classList.add("flash");
+        setTimeout(() => cardEl.classList.remove("flash"), 1600);
+      }
+    }
+  }
+
+  function showPreview(it) {
+    el.mapPreview.innerHTML = `<button type="button" class="preview-close" aria-label="بستن">${icon("x")}</button>${card(it)}`;
+    el.mapPreview.hidden = false;
+  }
+
+  function hidePreview() {
+    el.mapPreview.hidden = true;
+    el.mapPreview.innerHTML = "";
+  }
+
+  async function focusCenter(id) {
+    const it = byId.get(id);
+    if (!it || !it.location) return;
+    if (!state.map) await openMap();
+    const marker = mapState.markers.get(id);
+    if (!marker || !mapState.cluster.hasLayer(marker)) {
+      moveMap((m) => m.setView([it.location.lat, it.location.lng], 16));
+      return;
+    }
+    mapState.cluster.zoomToShowLayer(marker, () => openCenter(it, marker, false));
+  }
+
+  function highlightMarker(id) {
+    if (mapState.highlighted) mapState.highlighted.classList.remove("hl");
+    mapState.highlighted = null;
+    const marker = id && mapState.markers.get(id);
+    const pin = marker && marker.getElement() && marker.getElement().querySelector(".pin");
+    if (pin) {
+      pin.classList.add("hl");
+      mapState.highlighted = pin;
+    }
+  }
+
+  async function openMap() {
+    state.map = true;
+    document.body.classList.add("map-mode");
+    el.mapPanel.hidden = false;
+    el.mapToggle.setAttribute("aria-pressed", "true");
+    try {
+      await loadLeaflet();
+    } catch (err) {
+      toast("بارگذاری نقشه ممکن نشد");
+      closeMap();
+      return;
+    }
+    const first = !mapState.map;
+    if (first) initMap();
+    mapState.map.invalidateSize();
+    mapState.sig = null;
+    if (first && pendingView) {
+      const [lat, lng, z] = pendingView;
+      pendingView = null;
+      moveMap((m) => m.setView([lat, lng], z));
+    } else if (first) {
+      mapState.needFit = true;
+      if (!mobile.matches) state.bounds = null;
+    }
+    if (!mobile.matches && !mapState.needFit) state.bounds = mapBounds();
+    apply();
+  }
+
+  function closeMap() {
+    state.map = false;
+    // On mobile an area chosen with «جستجو در این محدوده» stays as a filter on the list.
+    if (!mobile.matches) state.bounds = null;
+    document.body.classList.remove("map-mode");
+    el.mapPanel.hidden = true;
+    el.mapToggle.setAttribute("aria-pressed", "false");
+    el.searchArea.hidden = true;
+    hidePreview();
+    apply();
+  }
+
+  const toggleMap = () => (state.map ? closeMap() : openMap());
+
+  // ---------- Near me ----------
+  function distanceKm(a, b) {
+    const r = Math.PI / 180;
+    const h = Math.sin((b.lat - a.lat) * r / 2) ** 2 +
+      Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin((b.lng - a.lng) * r / 2) ** 2;
+    return 12742 * Math.asin(Math.sqrt(h));
+  }
+
+  function fmtKm(d) {
+    if (d < 1) return `${toFa(Math.max(10, Math.round(d * 100) * 10))} متر`;
+    return `${toFa(d < 10 ? d.toFixed(1) : Math.round(d)).replace(".", "٫")} کیلومتر`;
+  }
+
+  function locateMe() {
+    if (!navigator.geolocation) {
+      toast("مرورگر شما از موقعیت‌یابی پشتیبانی نمی‌کند");
+      return;
+    }
+    toast("در حال یافتن موقعیت شما…");
+    navigator.geolocation.getCurrentPosition((pos) => {
+      state.near = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      state.sort = "near";
+      if (mapState.map && state.map) {
+        const L = window.L;
+        if (mapState.user) mapState.user.remove();
+        mapState.user = L.marker([state.near.lat, state.near.lng], {
+          interactive: false, keyboard: false,
+          icon: L.divIcon({ className: "pin-wrap", iconSize: [16, 16], html: '<div class="user-dot"></div>' }),
+        }).addTo(mapState.map);
+        if (mobile.matches) {
+          moveMap((m) => m.setView([state.near.lat, state.near.lng], 14));
+        } else {
+          mapState.map.setView([state.near.lat, state.near.lng], 14);
+        }
+      }
+      apply();
+    }, () => {
+      toast("دسترسی به موقعیت شما داده نشد");
+      if (!state.near && state.sort === "near") {
+        state.sort = "relevance";
+        apply();
+      }
+    }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
+  }
+
   // ---------- Events ----------
   function change(fn, scroll = true) {
     fn();
@@ -540,9 +873,23 @@
   });
   el.clearQ.addEventListener("click", () => { el.q.value = ""; syncClear(); el.q.focus(); change(() => { state.q = ""; }, false); });
 
-  el.province.addEventListener("change", () => change(() => { state.province = el.province.value; state.city = ""; }));
-  el.city.addEventListener("change", () => change(() => { state.city = el.city.value; }));
-  el.sort.addEventListener("change", () => change(() => { state.sort = el.sort.value; }));
+  // Choosing a place zooms the map to it.
+  const refit = () => {
+    if (!state.map) return;
+    mapState.needFit = true;
+    state.bounds = null;
+    el.searchArea.hidden = true;
+  };
+  el.province.addEventListener("change", () => change(() => { state.province = el.province.value; state.city = ""; refit(); }));
+  el.city.addEventListener("change", () => change(() => { state.city = el.city.value; refit(); }));
+  el.sort.addEventListener("change", () => {
+    if (el.sort.value === "near" && !state.near) {
+      state.sort = "near";
+      locateMe();
+      return;
+    }
+    change(() => { state.sort = el.sort.value; });
+  });
   el.onlineOnly.addEventListener("change", () => change(() => { state.online = el.onlineOnly.checked; }, !mobile.matches));
   el.allDayOnly.addEventListener("change", () => change(() => { state.allDay = el.allDayOnly.checked; }, !mobile.matches));
   el.phoneOnly.addEventListener("change", () => change(() => { state.phone = el.phoneOnly.checked; }, !mobile.matches));
@@ -583,7 +930,8 @@
   });
 
   const resetAll = () => change(() => {
-    Object.assign(state, { q: "", province: "", city: "", cat: "", ins: "", online: false, phone: false, allDay: false });
+    Object.assign(state, { q: "", province: "", city: "", cat: "", ins: "", online: false, phone: false, allDay: false, bounds: null });
+    if (state.map) mapState.needFit = true;
     state.svcs.clear();
     el.q.value = "";
     syncClear();
@@ -591,17 +939,36 @@
   el.resetAll.addEventListener("click", resetAll);
   el.emptyReset.addEventListener("click", resetAll);
 
-  el.cards.addEventListener("click", (e) => {
-    const b = e.target.closest("[data-copy]");
-    if (b) copy(b.dataset.copy);
+  // Cards also appear in the map preview, so handle their buttons anywhere on the page.
+  document.addEventListener("click", (e) => {
+    const copyBtn = e.target.closest("[data-copy]");
+    if (copyBtn) copy(copyBtn.dataset.copy);
+    const locate = e.target.closest("[data-locate]");
+    if (locate) focusCenter(locate.dataset.locate);
+    if (e.target.closest(".preview-close")) hidePreview();
+  });
+  el.cards.addEventListener("mouseover", (e) => {
+    if (!state.map || mobile.matches) return;
+    const c = e.target.closest(".card");
+    highlightMarker(c && c.dataset.id);
+  });
+  el.cards.addEventListener("mouseleave", () => highlightMarker(null));
+
+  el.mapToggle.addEventListener("click", toggleMap);
+  el.mapToggleMobile.addEventListener("click", toggleMap);
+  el.searchArea.addEventListener("click", () => {
+    state.bounds = mapBounds();
+    el.searchArea.hidden = true;
+    hidePreview();
+    apply();
   });
   el.exportCsv.addEventListener("click", exportCsv);
 
   // Only one directions menu open at a time; close it on outside click or Escape.
   const closeMenus = (except) => document.querySelectorAll(".nav-menu[open]")
     .forEach((d) => { if (d !== except) d.open = false; });
-  el.cards.addEventListener("toggle", (e) => {
-    if (!e.target.open) return;
+  document.addEventListener("toggle", (e) => {
+    if (!e.target.classList || !e.target.classList.contains("nav-menu") || !e.target.open) return;
     closeMenus(e.target);
     // Open toward whichever side has room, so the menu never leaves the screen.
     const menu = e.target.querySelector(".menu");
@@ -618,13 +985,22 @@
   el.applyFilters.addEventListener("click", () => { closeSheet(); change(() => {}); });
   el.backdrop.addEventListener("click", closeSheet);
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") { closeMenus(); closeSheet(); }
+    if (e.key === "Escape") { closeMenus(); closeSheet(); hidePreview(); }
     if (e.key === "/" && document.activeElement !== el.q && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) {
       e.preventDefault();
       el.q.focus();
     }
   });
-  mobile.addEventListener("change", () => { if (!mobile.matches) closeSheet(); });
+  mobile.addEventListener("change", () => {
+    if (!mobile.matches) closeSheet();
+    if (mapState.map && state.map) {
+      mapState.map.invalidateSize();
+      el.searchArea.hidden = true;
+      hidePreview();
+      state.bounds = mobile.matches ? null : mapBounds();
+      apply();
+    }
+  });
 
   new IntersectionObserver((entries) => {
     if (entries[0].isIntersecting) renderMore();
@@ -634,7 +1010,15 @@
   const onScroll = () => bar.classList.toggle("stuck", bar.getBoundingClientRect().top <= 0 && window.scrollY > 0);
   window.addEventListener("scroll", onScroll, { passive: true });
 
-  window.addEventListener("popstate", () => { readUrl(); el.q.value = state.q; syncClear(); apply(); });
+  window.addEventListener("popstate", () => {
+    const wasMap = state.map;
+    readUrl();
+    el.q.value = state.q;
+    syncClear();
+    if (state.map && !wasMap) openMap();
+    else if (!state.map && wasMap) closeMap();
+    else apply();
+  });
 
   // ---------- Init ----------
   el.cards.innerHTML = '<div class="skeleton"></div>'.repeat(4);
@@ -644,6 +1028,7 @@
     el.q.value = state.q;
     syncClear();
     apply();
+    if (state.map) openMap();
   }).catch((err) => {
     console.error(err);
     el.cards.innerHTML = "";

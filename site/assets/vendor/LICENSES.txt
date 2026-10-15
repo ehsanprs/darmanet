@@ -1,0 +1,11 @@
+Third-party files in this folder (unmodified, from cdnjs.cloudflare.com):
+
+leaflet.min.js, leaflet.min.css
+  Leaflet 1.9.4 - https://leafletjs.com
+  BSD 2-Clause License, Copyright (c) 2010-2023 Volodymyr Agafonkin, (c) 2010-2011 CloudMade
+
+leaflet.markercluster.js, MarkerCluster.css
+  Leaflet.markercluster 1.5.3 - https://github.com/Leaflet/Leaflet.markercluster
+  MIT License, Copyright (c) 2012 David Leaver
+
+Map data and tiles: (c) OpenStreetMap contributors (ODbL), https://www.openstreetmap.org/copyright

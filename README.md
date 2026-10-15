@@ -68,6 +68,23 @@ appear in several categories (e.g. a درمانگاه offering اکو is also un
 - The website reads the category/service labels and search synonyms from `taxonomy`
   in `centers.json`, so new services only need a rule in `categories.py`.
 
+## Map
+
+The «نقشه» button (desktop) or the «نقشه / فهرست» switch (mobile) shows the filtered
+centers on a Leaflet map with OpenStreetMap tiles. Pins are colored by category and grouped
+into numbered clusters; approximate locations have a dashed pin.
+
+- **Desktop:** list and map side by side; the list always shows the centers inside the
+  visible map area and updates as you pan or zoom. Clicking a pin opens a popup and
+  highlights its card; hovering a card highlights its pin.
+- **Mobile:** full-screen map; after moving it, «جستجو در این محدوده» limits the results to
+  that area (kept as a removable filter when you go back to the list). Tapping a pin opens
+  the center's card.
+- Choosing a province or city zooms the map to it; «نزدیک من» (map button or the
+  «نزدیک‌ترین به من» sort) sorts by distance and shows it on each card.
+- Leaflet 1.9.4 and Leaflet.markercluster 1.5.3 are stored in `site/assets/vendor/`
+  and loaded only when the map is opened. The map tiles need internet; the list works offline.
+
 ## Data cleaning
 
 - The source repeats every record (about half the pages are duplicates); duplicates are removed.
