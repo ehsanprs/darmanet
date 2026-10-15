@@ -1,0 +1,6 @@
+.venv/
+cache/
+__pycache__/
+.claude/
+# Excel exports outside the site (the published copy lives in site/data/)
+/*.xlsx

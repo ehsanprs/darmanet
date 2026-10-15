@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>درمانت | مراکز طرف قرارداد با بیمه سامان</title>
+  <meta name="description" content="درمانت: جستجوی سریع مراکز درمانی، آزمایشگاه‌ها، دندانپزشکی‌ها و مطب‌های طرف قرارداد با بیمه سامان در سراسر ایران">
+  <meta name="theme-color" content="#0f766e">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f766e'/%3E%3Cpath d='M13 7h6v6h6v6h-6v6h-6v-6H7v-6h6z' fill='white'/%3E%3C/svg%3E">
+  <link rel="preload" href="assets/fonts/Vazirmatn-wght.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#results">رفتن به نتایج</a>
+
+  <header class="hero">
+    <div class="container">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M9.5 3h5v6.5H21v5h-6.5V21h-5v-6.5H3v-5h6.5z"/></svg>
+        </span>
+        <div>
+          <h1>درمانت</h1>
+          <p class="tagline">مراکز طرف قرارداد با بیمه سامان</p>
+        </div>
+      </div>
+
+      <form class="search-panel" id="searchForm" role="search" onsubmit="return false">
+        <label class="search-box">
+          <span class="sr-only">جستجو</span>
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input id="q" type="search" autocomplete="off" enterkeyhint="search"
+                 placeholder="نام مرکز یا پزشک، آدرس یا تلفن…">
+          <button type="button" class="clear-q" id="clearQ" aria-label="پاک کردن جستجو" hidden>
+            <svg class="icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+          </button>
+        </label>
+        <div class="location">
+          <label class="select-wrap">
+            <span class="select-label">استان</span>
+            <select id="province"></select>
+          </label>
+          <label class="select-wrap">
+            <span class="select-label">شهرستان</span>
+            <select id="city"></select>
+          </label>
+        </div>
+      </form>
+    </div>
+  </header>
+
+  <nav class="types-bar" aria-label="نوع مرکز درمانی">
+    <div class="container">
+      <div class="chips" id="typeChips" role="group"></div>
+    </div>
+  </nav>
+
+  <main class="container layout">
+    <aside class="filters" id="filters" aria-label="فیلترها">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="filters-head">
+        <h2>فیلترها</h2>
+        <button type="button" class="link-btn" id="resetAll">پاک کردن همه</button>
+        <button type="button" class="icon-btn close-filters" id="closeFilters" aria-label="بستن">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+
+      <fieldset class="filter-group">
+        <legend>بیمه پایه شما</legend>
+        <p class="hint">فقط مراکزی که با بیمه شما قرارداد دارند نمایش داده می‌شوند.</p>
+        <div class="radio-list" id="insuranceList"></div>
+      </fieldset>
+
+      <fieldset class="filter-group">
+        <legend>خدمات</legend>
+        <label class="switch">
+          <input type="checkbox" id="onlineOnly">
+          <span class="switch-track" aria-hidden="true"></span>
+          <span>دارای معرفی‌نامه آنلاین <span class="count" id="onlineCount"></span></span>
+        </label>
+        <label class="switch">
+          <input type="checkbox" id="phoneOnly">
+          <span class="switch-track" aria-hidden="true"></span>
+          <span>دارای شماره تماس معتبر <span class="count" id="phoneCount"></span></span>
+        </label>
+      </fieldset>
+
+      <fieldset class="filter-group mobile-only">
+        <legend>نوع مرکز</legend>
+        <div class="check-list" id="typeList"></div>
+      </fieldset>
+
+      <div class="filters-foot">
+        <button type="button" class="btn primary block" id="applyFilters">نمایش نتایج</button>
+      </div>
+    </aside>
+    <div class="backdrop" id="backdrop" hidden></div>
+
+    <section class="results" id="results" tabindex="-1" aria-label="نتایج">
+      <div class="results-head">
+        <p class="result-count" id="resultCount" aria-live="polite">در حال بارگذاری…</p>
+        <div class="results-tools">
+          <label class="sort">
+            <span class="sr-only">مرتب‌سازی</span>
+            <select id="sort">
+              <option value="relevance">مرتبط‌ترین</option>
+              <option value="name">بر اساس نام</option>
+              <option value="city">بر اساس شهر</option>
+            </select>
+          </label>
+          <button type="button" class="btn ghost small" id="exportCsv" title="دریافت نتایج فعلی به صورت فایل اکسل (CSV)">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14"/></svg>
+            <span>خروجی</span>
+          </button>
+        </div>
+      </div>
+      <div class="active-filters" id="activeFilters"></div>
+      <div class="cards" id="cards"></div>
+      <div class="sentinel" id="sentinel" aria-hidden="true"></div>
+      <div class="empty" id="empty" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5M8.5 11h5"/></svg>
+        <h3>مرکزی با این مشخصات پیدا نشد</h3>
+        <p>عبارت جستجو را کوتاه‌تر کنید یا برخی فیلترها را بردارید.</p>
+        <button type="button" class="btn primary" id="emptyReset">پاک کردن فیلترها</button>
+      </div>
+    </section>
+  </main>
+
+  <button type="button" class="fab" id="openFilters" aria-controls="filters">
+    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
+    <span>فیلترها</span>
+    <span class="fab-badge" id="filterBadge" hidden></span>
+  </button>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>منبع اطلاعات: <a href="https://darmanet.ir/table/" target="_blank" rel="noopener">darmanet.ir</a>
+        · آخرین به‌روزرسانی: <span id="updated">—</span>
+        · <a href="data/darmanet_all_provinces.xlsx" download>دانلود فایل اکسل کامل</a></p>
+      <p class="muted">این وب‌سایت غیررسمی است و ارتباطی با بیمه سامان یا darmanet.ir ندارد؛ اطلاعات از منبع عمومی بالا گردآوری شده است.</p>
+      <p class="muted">پیش از مراجعه، لطفاً با مرکز درمانی تماس بگیرید و از برقراری قرارداد اطمینان حاصل کنید.</p>
+    </div>
+  </footer>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="data/centers.js"></script>
+  <script src="assets/app.js"></script>
+</body>
+</html>
