@@ -335,6 +335,24 @@ mark { background: var(--mark); color: inherit; border-radius: 3px; padding: 0 1
 .call { background: var(--primary); color: var(--on-primary); }
 .call:hover { background: var(--primary-strong); }
 .call .num { direction: ltr; unicode-bidi: isolate; font-weight: 700; letter-spacing: .3px; }
+.nav-menu { position: relative; }
+.nav-menu summary { list-style: none; }
+.nav-menu summary::-webkit-details-marker { display: none; }
+.nav-btn { background: var(--primary-soft); color: var(--primary-strong); cursor: pointer; }
+.nav-btn:hover { background: color-mix(in srgb, var(--primary) 22%, transparent); }
+.nav-btn small { font-weight: 400; opacity: .8; }
+.nav-menu[open] { z-index: 15; }
+.card { position: relative; }
+.card:has(.nav-menu[open]) { z-index: 10; }
+.nav-menu[open] .nav-btn { background: var(--primary); color: var(--on-primary); }
+.menu {
+  position: absolute; top: calc(100% + 6px); right: 0; min-width: 210px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: var(--shadow-lg); padding: 6px; display: flex; flex-direction: column;
+}
+.menu a { padding: 9px 12px; border-radius: 8px; color: var(--text); text-decoration: none; font-size: 14px; }
+.menu a:hover, .menu a:focus-visible { background: var(--surface-2); color: var(--primary); }
+.menu-note { margin: 2px 4px 6px; padding: 6px 8px; font-size: 12px; line-height: 1.6; color: var(--warn); background: var(--warn-soft); border-radius: 8px; }
 .phone-raw { font-size: 13px; color: var(--muted); align-self: center; direction: ltr; unicode-bidi: isolate; }
 
 .sentinel { height: 1px; }

@@ -28,6 +28,7 @@
     pin: "M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21zm0-9a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z",
     phone: "M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2",
     copy: "M9 9h11v11H9zM5 15H4V4h11v1",
+    nav: "M3 11 21 3l-8 18-2-8z",
     search: "M4 11a7 7 0 1 0 14 0 7 7 0 1 0-14 0m16.5 9.5L16 16",
     x: "M6 6l12 12M18 6 6 18",
     grid: "M4 4h6v6H4zm10 0h6v6h-6zM4 14h6v6H4zm10 0h6v6h-6z",
@@ -86,6 +87,28 @@
       .toLowerCase()
       .replace(/\s+/g, " ")
       .trim();
+  }
+
+  const IS_ANDROID = /Android/i.test(navigator.userAgent);
+
+  function navMenu(it) {
+    if (!it.location) return "";
+    const { lat, lng } = it.location;
+    const ll = `${lat},${lng}`;
+    const approx = it.geocode && it.geocode.approx;
+    const links = [
+      ["Google Maps", `https://www.google.com/maps/dir/?api=1&destination=${ll}`],
+      ["بلد", `https://balad.ir/location?latitude=${lat}&longitude=${lng}&zoom=17`],
+      ["Waze", `https://waze.com/ul?ll=${ll}&navigate=yes`],
+    ];
+    if (IS_ANDROID) links.push(["سایر برنامه‌ها (نشان و …)", `geo:${ll}?q=${ll}(${encodeURIComponent(it.name)})`]);
+    return `<details class="nav-menu">
+        <summary class="btn nav-btn" title="${approx ? "موقعیت تقریبی است" : "مسیریابی تا این مرکز"}">${icon("nav")}مسیریابی${approx ? " <small>(تقریبی)</small>" : ""}</summary>
+        <div class="menu" role="menu">
+          ${approx ? `<p class="menu-note">موقعیت این مرکز تقریبی است؛ پیش از حرکت تماس بگیرید.</p>` : ""}
+          ${links.map(([label, href]) => `<a role="menuitem" href="${href}" target="_blank" rel="noopener">${escapeHtml(label)}</a>`).join("")}
+        </div>
+      </details>`;
   }
 
   function formatPhone(num) {
@@ -360,6 +383,7 @@
       ${it.note ? `<p class="note">${highlight(it.note, tokens)}</p>` : ""}
       <div class="actions">
         ${calls}${rawPhone}
+        ${navMenu(it)}
         <a class="btn ghost" href="https://www.google.com/search?q=${googleQ}" target="_blank" rel="noopener" title="جستجوی این مرکز در گوگل (نقشه، نظرات، ساعت کاری)">${icon("search")}جستجو در گوگل</a>
         ${it.address ? `<button type="button" class="btn ghost" data-copy="${escapeHtml(it.address)}" title="کپی آدرس">${icon("copy")}کپی آدرس</button>` : ""}
       </div>
@@ -495,12 +519,28 @@
   });
   el.exportCsv.addEventListener("click", exportCsv);
 
+  // Only one directions menu open at a time; close it on outside click or Escape.
+  const closeMenus = (except) => document.querySelectorAll(".nav-menu[open]")
+    .forEach((d) => { if (d !== except) d.open = false; });
+  el.cards.addEventListener("toggle", (e) => {
+    if (!e.target.open) return;
+    closeMenus(e.target);
+    // Open toward whichever side has room, so the menu never leaves the screen.
+    const menu = e.target.querySelector(".menu");
+    menu.style.left = menu.style.right = "";
+    if (menu.getBoundingClientRect().left < 8) { menu.style.right = "auto"; menu.style.left = "0"; }
+  }, true);
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".nav-menu")) closeMenus();
+    else if (e.target.closest(".menu a")) closeMenus();
+  });
+
   el.openFilters.addEventListener("click", openSheet);
   el.closeFilters.addEventListener("click", closeSheet);
   el.applyFilters.addEventListener("click", () => { closeSheet(); change(() => {}); });
   el.backdrop.addEventListener("click", closeSheet);
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") closeSheet();
+    if (e.key === "Escape") { closeMenus(); closeSheet(); }
     if (e.key === "/" && document.activeElement !== el.q && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) {
       e.preventDefault();
       el.q.focus();
