@@ -10,7 +10,7 @@ if not exist .venv\Scripts\python.exe (
 set PYTHONIOENCODING=utf-8
 .venv\Scripts\python update_data.py %* || goto :error
 echo.
-echo Done. Open site\index.html to see the updated data.
+echo Done. Next, run geocode_data.bat to find locations of new centers.
 pause
 exit /b 0
 :error

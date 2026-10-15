@@ -5,6 +5,10 @@ Usage:
     python update_data.py --cached   # rebuild from the last downloaded pages
     python update_data.py --force    # write even if the row count drops a lot
 
+Merges into the existing database: new centers are added (without
+coordinates), centers no longer listed are marked "deleted", and known
+centers keep their coordinates. Run geocode_data.py afterwards.
+
 Writes:
     site/data/centers.json   canonical database
     site/data/centers.js     same data as a script, so index.html works offline
@@ -14,15 +18,11 @@ Writes:
 import argparse
 import datetime as dt
 import hashlib
-import json
 import re
 import sys
-from pathlib import Path
 
+from db import DATA_DIR, load, save, today
 from scrape_darmanet import BASE, CACHE, scrape, write_excel
-
-ROOT = Path(__file__).parent
-DATA_DIR = ROOT / "site" / "data"
 
 # The source data has a few city names in the province column.
 PROVINCE_FIX = {"تبریز": "آذربایجان شرقی"}
@@ -135,6 +135,42 @@ def clean(headers, results):
     return sorted(seen.values(), key=lambda c: (c["province"], c["city"], c["type"], c["name"]))
 
 
+# Fields that only exist in our database, never in the scraped source.
+KEEP_FIELDS = ("location", "geocode", "addedAt")
+
+
+def merge(old_centers, scraped):
+    """Merge freshly scraped centers into the existing database.
+
+    Known centers get their source fields refreshed but keep coordinates;
+    new centers are added without coordinates; centers missing from the
+    source are kept and marked deleted (and restored if they come back).
+    """
+    old = {c["id"]: c for c in old_centers}
+    merged, added, restored = [], 0, 0
+    for c in scraped:
+        prev = old.pop(c["id"], None)
+        if prev is None:
+            c["addedAt"] = today()
+            added += 1
+        else:
+            for k in KEEP_FIELDS:
+                if k in prev:
+                    c[k] = prev[k]
+            if prev.get("deleted"):
+                restored += 1
+        merged.append(c)
+    removed = 0
+    for c in old.values():
+        if not c.get("deleted"):
+            c["deleted"] = True
+            c["deletedAt"] = today()
+            removed += 1
+        merged.append(c)
+    merged.sort(key=lambda c: (c["province"], c["city"], c["type"], c["name"]))
+    return merged, {"added": added, "deleted": removed, "restored": restored}
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--cached", action="store_true",
@@ -145,31 +181,26 @@ def main():
 
     cache = CACHE if args.cached else CACHE / dt.date.today().isoformat()
     headers, results = scrape("all", cache)
-    centers = clean(headers, results)
+    scraped = clean(headers, results)
 
-    json_path = DATA_DIR / "centers.json"
-    if json_path.exists() and not args.force:
-        old = json.loads(json_path.read_text(encoding="utf-8"))["meta"]["count"]
-        if len(centers) < old * 0.7:
-            sys.exit(f"Only {len(centers)} centers found (previously {old}). "
-                     "The source site may have changed; nothing was written. "
-                     "Re-run with --force to write anyway.")
+    db = load()
+    active_before = sum(1 for c in db["centers"] if not c.get("deleted"))
+    if active_before and len(scraped) < active_before * 0.7 and not args.force:
+        sys.exit(f"Only {len(scraped)} centers found (previously {active_before}). "
+                 "The source site may have changed; nothing was written. "
+                 "Re-run with --force to write anyway.")
 
-    db = {
-        "meta": {
-            "updated": dt.datetime.now().isoformat(timespec="minutes"),
-            "source": BASE,
-            "count": len(centers),
-        },
-        "centers": centers,
-    }
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    text = json.dumps(db, ensure_ascii=False, separators=(",", ":"))
-    json_path.write_text(text, encoding="utf-8")
-    (DATA_DIR / "centers.js").write_text(
-        f"window.DARMANET_DB = {text};\n", encoding="utf-8")
+    db["centers"], stats = merge(db["centers"], scraped)
+    db["meta"].update({
+        "updated": dt.datetime.now().isoformat(timespec="minutes"),
+        "source": BASE,
+    })
+    save(db)
     write_excel(DATA_DIR / "darmanet_all_provinces.xlsx", "all", headers, results)
-    print(f"Database updated: {len(centers)} centers -> {json_path}")
+    need = sum(1 for c in db["centers"] if not c.get("deleted") and not c.get("location"))
+    print(f"Database updated: {len(scraped)} active centers "
+          f"({stats['added']} new, {stats['deleted']} marked deleted, {stats['restored']} restored).")
+    print(f"{need} centers have no coordinates yet; run geocode_data.bat to locate them.")
 
 
 if __name__ == "__main__":

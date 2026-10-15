@@ -4,3 +4,6 @@ __pycache__/
 .claude/
 # Excel exports outside the site (the published copy lives in site/data/)
 /*.xlsx
+# Local secrets (Neshan API key) - never commit
+.env
+*.tmp

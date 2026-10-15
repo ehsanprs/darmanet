@@ -163,7 +163,8 @@
 
   // ---------- Data ----------
   function prepare(db) {
-    items = db.centers.map((c) => {
+    // Centers no longer listed on the source stay in the database, marked deleted.
+    items = db.centers.filter((c) => !c.deleted).map((c) => {
       const phoneSearch = c.phones.map((n) => `${n} ${n.slice(1)} ${n.slice(3)}`).join(" ");
       return Object.assign(c, {
         _name: normalize(c.name),

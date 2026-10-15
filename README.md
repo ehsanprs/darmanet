@@ -12,28 +12,44 @@ are stored locally, so the site works fully offline.
 ## Publishing (GitHub Pages)
 
 Every push to `main` that changes `site/` deploys it automatically via
-`.github/workflows/pages.yml`. To publish new data: run `update_data.bat`, then commit and push.
+`.github/workflows/pages.yml`. To publish new data: run the two steps below, then commit and push.
 
 ## Update the data
 
-Double-click **`update_data.bat`**, or run:
+### Step 1: new and removed centers — `update_data.bat`
 
-```
-.venv\Scripts\python update_data.py
-```
+Scrapes all pages again (about 2-3 minutes), cleans the data and **merges** it into the
+existing database:
 
-This scrapes all pages again (about 2-3 minutes), cleans the data and rewrites:
-
-| File | Purpose |
-|---|---|
-| `site/data/centers.json` | The database (clean JSON, one object per center) |
-| `site/data/centers.js` | Same data wrapped for `file://` use; loaded by the page |
-| `site/data/darmanet_all_provinces.xlsx` | Full Excel export (linked in the site footer) |
+- centers already in the database are refreshed but **keep their coordinates**;
+- new centers are added **without coordinates** (with an `addedAt` date);
+- centers no longer on darmanet.ir stay in the file with `"deleted": true` and a `deletedAt`
+  date (the website hides them); if they come back they are restored.
 
 Options: `--cached` rebuilds from already-downloaded pages without fetching,
 `--force` writes even if far fewer centers come back than last time
 (by default the script refuses, to protect against a broken scrape).
 Downloaded pages are cached per day under `cache/`; delete old folders freely.
+
+### Step 2: coordinates — `geocode_data.bat`
+
+Looks up coordinates only for active centers that have none, using the Neshan
+"address to point" API (one request per unique address; centers sharing an address reuse it).
+Progress is saved every 50 addresses, so it can be stopped and re-run safely; if the Neshan
+credit runs out it stops and the next run continues where it left off.
+Addresses Neshan cannot find are marked `not_found` and skipped next time
+(use `--retry-failed` to try them again). `--limit N` looks up at most N addresses.
+
+The API key is read from a local **`.env`** file (`NESHAN_API_KEY=...`) that is git-ignored,
+or from the `NESHAN_API_KEY` environment variable.
+
+### Files
+
+| File | Purpose |
+|---|---|
+| `site/data/centers.json` | The database (one object per center; `location: {lat, lng}` once geocoded) |
+| `site/data/centers.js` | Same data wrapped for `file://` use; loaded by the page |
+| `site/data/darmanet_all_provinces.xlsx` | Full Excel export (linked in the site footer) |
 
 ## Data cleaning
 
