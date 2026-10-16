@@ -55,14 +55,18 @@ or from the `NESHAN_API_KEY` environment variable.
 
 The source's broad types are mapped to visitor-oriented categories in `categories.py`
 (دندانپزشکی, آزمایشگاه, تصویربرداری, درمانگاه و مطب, فیزیوتراپی و توانبخشی, داروخانه,
-بیمارستان, قلب و عروق, چشم و بینایی, مغز و اعصاب, گوارش و آندوسکوپی, جراحی محدود,
-اورژانس, پرستاری در منزل). Specific services (سونوگرافی, MRI, اکو, نوار عصب, ارتودنسی, ...)
+بیمارستان, قلب و عروق, چشم و بینایی, مغز و اعصاب, گوارش و آندوسکوپی, سرطان و رادیوتراپی,
+جراحی محدود, اورژانس, پرستاری در منزل). Specific services (سونوگرافی, MRI, اکو, نوار عصب, ارتودنسی, ...)
 are detected from each center's name and description with keyword rules, and a center can
 appear in several categories (e.g. a درمانگاه offering اکو is also under قلب و عروق).
 "شبانه‌روزی" centers are flagged too.
 
-- Tags are rebuilt on every `update_data.bat` run; review `tag_report.txt` (counts and
-  examples per service) after changing rules.
+- Tags are rebuilt on every `update_data.bat` run, so new and changed centers get the same
+  rules. `tag_report.txt` lists the centers added in that update with their tags, counts and
+  examples per service, and description phrases no rule recognised (candidates for new rules).
+- Exclusions in descriptions are ignored ("به جز لیزیک", "... شامل قرارداد نمی‌شود",
+  "عدم پذیرش ..."), and hospital specialties are read from the hospital's name only.
+- After changing rules, run the checks: `.venv\Scripts\python -m unittest test_categories`.
 - Fix individual centers in `overrides.json` (by `id`), then re-tag without scraping:
   `.venv\Scripts\python categories.py`.
 - The website reads the category/service labels and search synonyms from `taxonomy`

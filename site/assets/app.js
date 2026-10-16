@@ -34,6 +34,7 @@
     x: "M6 6l12 12M18 6 6 18",
     grid: "M4 4h6v6H4zm10 0h6v6h-6zM4 14h6v6H4zm10 0h6v6h-6z",
     bolt: "M13 2 4 14h7l-1 8 9-12h-7z",
+    ribbon: "M12 3a3.5 3.5 0 0 0-3.5 3.5c0 2.6 2 5.1 3.5 7.2 1.5-2.1 3.5-4.6 3.5-7.2A3.5 3.5 0 0 0 12 3zm-2.2 13.7L6.5 21m11 0-3.3-4.3",
   };
 
   // Categories and services, from db.taxonomy (built by categories.py).

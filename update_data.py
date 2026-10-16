@@ -173,11 +173,17 @@ def merge(old_centers, scraped):
 
 
 def retag(db):
-    """Add categories/services to every center and write the review report."""
-    report = apply_tags(db["centers"], ROOT / "overrides.json")
+    """Add categories/services to every center and write the review report.
+
+    New and changed centers go through the same rules as the rest; centers
+    added today are listed first in the report so their tags can be checked.
+    """
+    new_ids = [c["id"] for c in db["centers"] if c.get("addedAt") == today() and not c.get("deleted")]
+    report = apply_tags(db["centers"], ROOT / "overrides.json", new_ids)
     db["taxonomy"] = taxonomy()
     (ROOT / "tag_report.txt").write_text(report, encoding="utf-8")
-    print("Categories updated; see tag_report.txt to review them.")
+    note = f" ({len(new_ids)} new centers listed at the top)" if new_ids else ""
+    print(f"Categories updated; see tag_report.txt to review them{note}.")
 
 
 def main():
