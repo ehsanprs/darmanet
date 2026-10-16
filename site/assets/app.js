@@ -173,7 +173,12 @@
     const mv = (p.get("mv") || "").split(",").map(Number);
     pendingView = mv.length === 3 && mv.every(Number.isFinite) ? mv : null;
     if (![...p.keys()].length) {
-      try { state.province = localStorage.getItem("darmanet.province") || ""; } catch (e) { /* storage unavailable */ }
+      // No filters in the address: restore the visitor's last province and city.
+      try {
+        state.province = localStorage.getItem("darmanet.province") || "";
+        const city = localStorage.getItem("darmanet.city") || "";
+        state.city = state.province && items.some((it) => it.province === state.province && it.city === city) ? city : "";
+      } catch (e) { /* storage unavailable */ }
     }
   }
 
@@ -198,7 +203,10 @@
     }
     const qs = p.toString();
     history.replaceState(null, "", qs ? `?${qs}` : location.pathname);
-    try { localStorage.setItem("darmanet.province", state.province); } catch (e) { /* storage unavailable */ }
+    try {
+      localStorage.setItem("darmanet.province", state.province);
+      localStorage.setItem("darmanet.city", state.city);
+    } catch (e) { /* storage unavailable */ }
   }
 
   // ---------- Data ----------
