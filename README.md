@@ -49,6 +49,17 @@ After geocoding, two free checks mark doubtful points (shown on the site as «ت
   sample of 15 flagged centers, 12 were confirmed wrong.
 Run only these checks with `.venv\Scripts\python geocode_data.py --check-only` (no API key).
 
+### Step 3: fix doubtful points by name — `fix_locations.bat`
+
+Searches each center with no point, a «تقریبی» point or a «احتمالاً نادرست» point by its
+**name** in Neshan's search service (one request per center, 40 toman), starting from where
+the center should be (its neighborhood, learned from other centers' addresses). A result is
+used only if it is a real place (not a street), its distinctive name words match, it lies in
+the expected area, and it clearly beats the next candidate; otherwise the center is listed
+with its candidates in `location_review.txt`. Use `--dry-run --limit 20` to preview.
+Requires the «جستجو» service to be enabled for the key in the Neshan panel.
+Checks: `.venv\Scripts\python -m unittest test_fix_locations`.
+
 The API key is read from a local **`.env`** file (`NESHAN_API_KEY=...`) that is git-ignored,
 or from the `NESHAN_API_KEY` environment variable.
 

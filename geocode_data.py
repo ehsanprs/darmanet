@@ -205,13 +205,19 @@ def address_areas(c, city_names):
     return out[:2]
 
 
-def flag_wrong_area(db):
-    """Mark located centers whose point is far from their own neighborhood."""
-    active = [c for c in db["centers"] if not c.get("deleted") and c.get("location")]
+def learn_areas(db):
+    """Where each neighborhood is, learned from the centers whose addresses name it.
+
+    Returns (known, areas_of): known maps (province, city, area) -> (middle point,
+    spread in km); areas_of maps a center id to the area names in its address.
+    """
+    active = [c for c in db["centers"] if not c.get("deleted")]
     city_names = {_norm(c["city"]) for c in active} | {_norm(c["province"]) for c in active}
     areas_of = {c["id"]: address_areas(c, city_names) for c in active}
     points = {}
     for c in active:
+        if not c.get("location"):
+            continue
         for a in areas_of[c["id"]]:
             points.setdefault((c["province"], c["city"], a), {})[c["address"]] = c["location"]
     known = {}
@@ -223,6 +229,13 @@ def flag_wrong_area(db):
         spread = statistics.median(km(p, mid) for p in pts)
         if spread <= AREA_MAX_SPREAD_KM:
             known[key] = (mid, spread)
+    return known, areas_of
+
+
+def flag_wrong_area(db):
+    """Mark located centers whose point is far from their own neighborhood."""
+    active = [c for c in db["centers"] if not c.get("deleted") and c.get("location")]
+    known, areas_of = learn_areas(db)
     flagged = 0
     for c in active:
         c["geocode"].pop("suspect", None)
