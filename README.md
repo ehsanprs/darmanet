@@ -57,6 +57,12 @@ the center should be (its neighborhood, learned from other centers' addresses). 
 used only if it is a real place (not a street), its distinctive name words match, it lies in
 the expected area, and it clearly beats the next candidate; otherwise the center is listed
 with its candidates in `location_review.txt`. Use `--dry-run --limit 20` to preview.
+
+Without the search service, `fix_locations.bat --by-address` looks the **address** up again,
+limited to the neighborhood it names, and checks every new point by asking Neshan which
+street it is on (two requests per address). Confirmed street matches become precise; if only
+the neighborhood is right the point is marked «تقریبی»; a misplaced point that cannot be
+confirmed is moved to the middle of its neighborhood (also «تقریبی»).
 Requires the «جستجو» service to be enabled for the key in the Neshan panel.
 Checks: `.venv\Scripts\python -m unittest test_fix_locations`.
 
