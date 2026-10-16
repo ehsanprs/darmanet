@@ -11,7 +11,7 @@
   --surface-2: #eef3f2;
   --text: #13201e;
   --text-2: #4d5d5a;
-  --muted: #7a8986;
+  --muted: #5d6b68;
   --border: #dde6e4;
   --primary: #0f766e;
   --primary-strong: #0b5c56;
@@ -19,9 +19,9 @@
   --on-primary: #ffffff;
   --hero-1: #0f766e;
   --hero-2: #115e59;
-  --ok: #15803d;
+  --ok: #166534;
   --ok-soft: #e3f5e8;
-  --warn: #a16207;
+  --warn: #854d0e;
   --warn-soft: #fbf1d9;
   --ins-tamin: #1d4ed8;
   --ins-tamin-soft: #e3ebfd;
@@ -34,7 +34,10 @@
   --shadow-lg: 0 12px 40px rgba(16, 40, 36, .18);
   --radius: 14px;
   --font: "Vazirmatn", Tahoma, "Segoe UI", system-ui, sans-serif;
-  color-scheme: light;
+  --chip-text-mix: 70%;
+  --chip-text-base: #000;
+  /* "only": the site has its own dark theme, so Chrome's automatic dark mode must not recolor it. */
+  color-scheme: only light;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -65,7 +68,9 @@
     --mark: #7c5f0b;
     --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 4px 16px rgba(0, 0, 0, .25);
     --shadow-lg: 0 12px 40px rgba(0, 0, 0, .5);
-    color-scheme: dark;
+    --chip-text-mix: 45%;
+    --chip-text-base: #fff;
+    color-scheme: only dark;
   }
 }
 
@@ -192,7 +197,9 @@ select option { color: #13201e; background: #fff; }
 .chips.sub .chip { padding: 5px 12px; font-size: 13px; box-shadow: none; background: var(--surface-2); }
 .chips.sub .chip[aria-pressed="true"] { background: var(--chip-c, var(--primary)); color: #fff; border-color: transparent; }
 .chips.sub .sub-label { align-self: center; font-size: 12px; color: var(--muted); white-space: nowrap; padding-inline-end: 2px; }
-.tag.svc { background: color-mix(in srgb, var(--chip-c) 12%, transparent); color: var(--chip-c); }
+/* Category colors are tuned for icons; text uses a darker (light theme) or lighter
+   (dark theme) shade of the same color so it stays readable. */
+.tag.svc { background: color-mix(in srgb, var(--chip-c) 12%, transparent); color: color-mix(in srgb, var(--chip-c) var(--chip-text-mix), var(--chip-text-base)); }
 .tag.unknown { border: 1px dashed var(--border); background: transparent; color: var(--muted); }
 .chip[data-zero] { opacity: .5; box-shadow: none; }
 .mobile-only { display: none; }
@@ -320,7 +327,7 @@ select option { color: #13201e; background: #fff; }
 .card-title h3 { font-size: 16px; font-weight: 700; overflow-wrap: anywhere; }
 .card-sub { font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
 .card-sub .sep { opacity: .5; }
-.type-name { color: var(--chip-c); font-weight: 500; }
+.type-name { color: color-mix(in srgb, var(--chip-c) var(--chip-text-mix), var(--chip-text-base)); font-weight: 500; }
 mark { background: var(--mark); color: inherit; border-radius: 3px; padding: 0 1px; }
 
 .address { display: flex; gap: 8px; font-size: 14px; color: var(--text-2); margin: 0; }
@@ -393,8 +400,10 @@ body.map-mode .cards { grid-template-columns: 1fr; }
 }
 .map-count:empty { display: none; }
 .search-area { box-shadow: var(--shadow-lg); border-radius: 999px; }
-.leaflet-container { background: var(--surface-2); font: inherit; }
-.leaflet-control-attribution { font-size: 10px; direction: ltr; }
+/* Leaflet's own stylesheet loads after this file (when the map opens), so these
+   rules are prefixed with .map-panel to take priority over its Arial font. */
+.map-panel .leaflet-container { background: var(--surface-2); font-family: var(--font); font-size: 14px; line-height: 1.7; }
+.map-panel .leaflet-control-attribution { font-size: 10px; direction: ltr; font-family: system-ui, sans-serif; }
 @media (prefers-color-scheme: dark) {
   .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.85) contrast(.9) saturate(.6); }
 }
@@ -411,27 +420,32 @@ body.map-mode .cards { grid-template-columns: 1fr; }
 .pin.hl { transform: rotate(-45deg) scale(1.35); box-shadow: 0 0 0 4px color-mix(in srgb, var(--pin) 35%, transparent), 0 2px 8px rgba(0,0,0,.4); }
 .leaflet-marker-icon.pin-wrap { background: none; border: 0; }
 .cluster {
+  font-family: var(--font);
   width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
   background: color-mix(in srgb, var(--primary) 85%, #000); color: #fff; font-weight: 700; font-size: 13px;
   box-shadow: 0 0 0 5px color-mix(in srgb, var(--primary) 30%, transparent), 0 2px 6px rgba(0,0,0,.3);
 }
 .cluster.lg { width: 48px; height: 48px; font-size: 14px; }
 .user-dot { width: 16px; height: 16px; border-radius: 50%; background: #2563eb; border: 3px solid #fff; box-shadow: 0 0 0 6px rgba(37, 99, 235, .25); }
-.leaflet-popup-content-wrapper { border-radius: 12px; background: var(--surface); color: var(--text); }
-.leaflet-popup-tip { background: var(--surface); }
-.leaflet-popup-content { margin: 12px 14px; direction: rtl; text-align: right; font-size: 13px; line-height: 1.7; min-width: 220px; }
-.pop h4 { margin: 0 0 2px; font-size: 14px; }
-.pop .muted { font-size: 12px; }
-.pop .pop-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
-.pop .pop-actions a { font-size: 12px; padding: 5px 10px; border-radius: 8px; text-decoration: none; }
-.pop .pop-actions .call { color: var(--on-primary); }
-.pop .pop-actions .ghost { border: 1px solid var(--border); color: var(--text); }
+.map-panel .leaflet-popup-content-wrapper { border-radius: 12px; background: var(--surface); color: var(--text); box-shadow: var(--shadow-lg); }
+.map-panel .leaflet-popup-tip { background: var(--surface); }
+.map-panel .leaflet-popup-content {
+  margin: 12px 14px; direction: rtl; text-align: right; min-width: 230px;
+  font-family: var(--font); font-size: 14px; line-height: 1.8; color: var(--text);
+}
+.map-panel .leaflet-popup-close-button { left: auto; right: 4px; color: var(--muted); }
+.pop h4 { margin: 0 0 2px; font-size: 15px; font-weight: 700; line-height: 1.6; color: var(--text); }
+.pop .muted { font-size: 13px; color: var(--text-2); }
+.pop .pop-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.map-panel .pop .pop-actions a { font-size: 13px; padding: 6px 12px; border-radius: 8px; text-decoration: none; font-weight: 500; }
+.map-panel .pop .pop-actions .call { background: var(--primary); color: var(--on-primary); }
+.map-panel .pop .pop-actions .ghost { border: 1px solid var(--border); color: var(--text); background: var(--surface); }
 .locate-btn {
   width: 36px; height: 36px; display: grid; place-items: center; background: var(--surface); color: var(--text);
   border: 0; border-radius: 8px; cursor: pointer;
 }
 .locate-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
-.leaflet-bar a, .leaflet-bar a:hover { background: var(--surface); color: var(--text); border-color: var(--border); }
+.map-panel .leaflet-bar a, .map-panel .leaflet-bar a:hover { background: var(--surface); color: var(--text); border-color: var(--border); }
 .card.flash { box-shadow: 0 0 0 3px var(--primary), var(--shadow); }
 .dist { color: var(--primary); font-weight: 700; }
 .map-preview { display: none; }
