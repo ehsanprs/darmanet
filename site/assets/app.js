@@ -86,21 +86,40 @@
 
   const IS_ANDROID = /Android/i.test(navigator.userAgent);
 
+  // How far to trust a center's map point: "ok", "approx" (street/area level) or
+  // "suspect" (far from the neighborhood named in its address).
+  function locQuality(it) {
+    const g = it.geocode || {};
+    if (g.suspect) return "suspect";
+    return g.approx ? "approx" : "ok";
+  }
+
+  function suspectText(it) {
+    const s = it.geocode.suspect;
+    return `آدرس این مرکز در «${s.area}» است، اما نقطه ثبت‌شده روی نقشه حدود ${toFa(Math.round(s.km))} کیلومتر دورتر است.`;
+  }
+
+  const addressSearchUrl = (it) =>
+    `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${it.name} ${it.address} ${it.city}`.slice(0, 200))}`;
+
   function navMenu(it) {
     if (!it.location) return "";
     const { lat, lng } = it.location;
     const ll = `${lat},${lng}`;
-    const approx = it.geocode && it.geocode.approx;
+    const quality = locQuality(it);
+    const approx = quality !== "ok";
     const links = [
+      ...(approx ? [["جستجوی آدرس در Google Maps", addressSearchUrl(it)]] : []),
       ["Google Maps", `https://www.google.com/maps/dir/?api=1&destination=${ll}`],
       ["بلد", `https://balad.ir/location?latitude=${lat}&longitude=${lng}&zoom=17`],
       ["Waze", `https://waze.com/ul?ll=${ll}&navigate=yes`],
     ];
     if (IS_ANDROID) links.push(["سایر برنامه‌ها (نشان و …)", `geo:${ll}?q=${ll}(${encodeURIComponent(it.name)})`]);
     return `<details class="nav-menu">
-        <summary class="btn nav-btn" title="${approx ? "موقعیت تقریبی است" : "مسیریابی تا این مرکز"}">${icon("nav")}مسیریابی${approx ? " <small>(تقریبی)</small>" : ""}</summary>
+        <summary class="btn nav-btn" title="${approx ? "موقعیت این مرکز دقیق نیست" : "مسیریابی تا این مرکز"}">${icon("nav")}مسیریابی${quality === "suspect" ? " <small>(نامطمئن)</small>" : approx ? " <small>(تقریبی)</small>" : ""}</summary>
         <div class="menu" role="menu">
-          ${approx ? `<p class="menu-note">موقعیت این مرکز تقریبی است؛ پیش از حرکت تماس بگیرید.</p>` : ""}
+          ${quality === "suspect" ? `<p class="menu-note">${suspectText(it)} برای اطمینان آدرس را جستجو کنید یا پیش از حرکت تماس بگیرید.</p>`
+            : approx ? `<p class="menu-note">موقعیت این مرکز تقریبی است؛ پیش از حرکت تماس بگیرید.</p>` : ""}
           ${links.map(([label, href]) => `<a role="menuitem" href="${href}" target="_blank" rel="noopener">${escapeHtml(label)}</a>`).join("")}
         </div>
       </details>`;
@@ -463,6 +482,9 @@
       tags.push(`<span class="tag unknown" title="نوع خدمات این مرکز در منبع ذکر نشده است؛ تماس بگیرید">خدمات مشخص نشده</span>`);
     }
     if (it.allDay) tags.push(`<span class="tag ok">شبانه‌روزی</span>`);
+    if (it.location && locQuality(it) === "suspect") {
+      tags.unshift(`<span class="tag warn loc-warn" title="${escapeHtml(suspectText(it))}">⚠ موقعیت روی نقشه احتمالاً نادرست</span>`);
+    }
     if (it.insurance === null) tags.push(`<span class="tag">بیمه پایه: نامشخص</span>`);
     else if (!it.insurance.length) tags.push(`<span class="tag warn">بدون قرارداد بیمه پایه</span>`);
     else INSURERS.forEach((i) => { if (it._ins.has(i.key)) tags.push(`<span class="tag ${i.cls}">${i.key}</span>`); });
@@ -665,12 +687,12 @@
   function makeMarker(it) {
     const L = window.L;
     const { icon: ic, color } = catStyle((it.categories || [])[0]);
-    const approx = it.geocode && it.geocode.approx;
+    const quality = locQuality(it);
     const marker = L.marker([it.location.lat, it.location.lng], {
-      title: it.name,
+      title: quality === "suspect" ? `${it.name} (موقعیت احتمالاً نادرست)` : it.name,
       icon: L.divIcon({
         className: "pin-wrap", iconSize: [30, 30], iconAnchor: [15, 36], popupAnchor: [0, -34],
-        html: `<div class="pin${approx ? " approx" : ""}" style="--pin:${color}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS[ic] || ICONS.clinic}"/></svg></div>`,
+        html: `<div class="pin${quality === "ok" ? "" : " approx"}${quality === "suspect" ? " suspect" : ""}" style="--pin:${color}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS[ic] || ICONS.clinic}"/></svg></div>`,
       }),
     });
     marker.on("click", () => openCenter(it, marker, true));
@@ -716,9 +738,11 @@
     return `<div class="pop">
         <h4>${escapeHtml(it.name)}</h4>
         <div class="muted">${escapeHtml(it.type)} · ${escapeHtml(it.city)}${it._dist < Infinity ? ` · <span class="dist">${fmtKm(it._dist)}</span>` : ""}</div>
-        ${it.geocode && it.geocode.approx ? '<div class="muted">موقعیت تقریبی است</div>' : ""}
+        ${locQuality(it) === "suspect" ? `<div class="pop-warn">⚠ ${suspectText(it)}</div>`
+          : locQuality(it) === "approx" ? '<div class="muted">موقعیت تقریبی است</div>' : ""}
         <div class="pop-actions">
           ${phone ? `<a class="call" href="tel:${phone}">تماس ${toFa(formatPhone(phone))}</a>` : ""}
+          ${locQuality(it) === "ok" ? "" : `<a class="ghost" href="${addressSearchUrl(it)}" target="_blank" rel="noopener">جستجوی آدرس</a>`}
           <a class="ghost" href="https://www.google.com/maps/dir/?api=1&destination=${ll}" target="_blank" rel="noopener">مسیریابی</a>
         </div>
       </div>`;

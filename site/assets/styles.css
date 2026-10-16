@@ -417,6 +417,14 @@ body.map-mode .cards { grid-template-columns: 1fr; }
 .pin svg { width: 16px; height: 16px; transform: rotate(45deg); fill: none; stroke: #fff; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
 .pin.approx { background: var(--surface); border: 2px dashed var(--pin); }
 .pin.approx svg { stroke: var(--pin); }
+/* Possibly misplaced: hollow red-dashed pin with a "!" badge. */
+.pin.suspect { border-color: #dc2626; }
+.pin.suspect::after {
+  content: "!"; position: absolute; top: -7px; right: -7px; transform: rotate(45deg);
+  width: 15px; height: 15px; border-radius: 50%; background: #dc2626; color: #fff;
+  font: 700 11px/15px var(--font); text-align: center; box-shadow: 0 0 0 2px #fff;
+}
+.pin { position: relative; }
 .pin.hl { transform: rotate(-45deg) scale(1.35); box-shadow: 0 0 0 4px color-mix(in srgb, var(--pin) 35%, transparent), 0 2px 8px rgba(0,0,0,.4); }
 .leaflet-marker-icon.pin-wrap { background: none; border: 0; }
 .cluster {
@@ -434,6 +442,16 @@ body.map-mode .cards { grid-template-columns: 1fr; }
   font-family: var(--font); font-size: 14px; line-height: 1.8; color: var(--text);
 }
 .map-panel .leaflet-popup-close-button { left: auto; right: 4px; color: var(--muted); }
+.pop .pop-warn { font-size: 13px; line-height: 1.7; margin-top: 4px; padding: 6px 8px; border-radius: 8px; background: var(--warn-soft); color: var(--warn); }
+.map-legend {
+  position: absolute; z-index: 500; bottom: 24px; left: 10px; direction: rtl;
+  background: var(--surface); color: var(--text-2); border-radius: 10px; box-shadow: var(--shadow);
+  padding: 6px 10px; font-size: 12px; display: flex; gap: 12px; align-items: center;
+}
+.map-legend span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.map-legend i { width: 12px; height: 12px; border-radius: 50%; display: inline-block; background: var(--primary); border: 2px solid #fff; box-shadow: 0 0 0 1px var(--border); }
+.map-legend i.approx { background: var(--surface); border: 2px dashed var(--primary); }
+.map-legend i.suspect { background: var(--surface); border: 2px dashed #dc2626; }
 .pop h4 { margin: 0 0 2px; font-size: 15px; font-weight: 700; line-height: 1.6; color: var(--text); }
 .pop .muted { font-size: 13px; color: var(--text-2); }
 .pop .pop-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
@@ -524,6 +542,7 @@ body.map-mode .cards { grid-template-columns: 1fr; }
     border: 0; background: var(--surface-2); color: var(--text); display: grid; place-items: center;
   }
   .leaflet-bottom { bottom: 70px; }
+  .map-legend { display: none; }
   .fab-badge { background: var(--primary); color: var(--on-primary); border-radius: 999px; min-width: 22px; height: 22px; padding: 0 6px; font-size: 12px; display: grid; place-items: center; }
   .site-footer { padding-bottom: 90px; }
 }

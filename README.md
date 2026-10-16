@@ -40,6 +40,15 @@ credit runs out it stops and the next run continues where it left off.
 Addresses Neshan cannot find are marked `not_found` and skipped next time
 (use `--retry-failed` to try them again). `--limit N` looks up at most N addresses.
 
+After geocoding, two free checks mark doubtful points (shown on the site as «تقریبی» or
+«⚠ موقعیت روی نقشه احتمالاً نادرست», with a dashed / red-dashed pin):
+- **approximate:** several different addresses got the exact same point, or the result fell
+  outside its city and was moved to the city center;
+- **possibly misplaced:** the point is far from the other centers that name the same
+  neighborhood in their address (e.g. an address in «پاسداران» placed 18 km away). In a
+  sample of 15 flagged centers, 12 were confirmed wrong.
+Run only these checks with `.venv\Scripts\python geocode_data.py --check-only` (no API key).
+
 The API key is read from a local **`.env`** file (`NESHAN_API_KEY=...`) that is git-ignored,
 or from the `NESHAN_API_KEY` environment variable.
 

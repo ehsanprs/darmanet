@@ -4,6 +4,7 @@ Usage:
     python geocode_data.py                 # locate every center without coordinates
     python geocode_data.py --limit 50      # only 50 addresses (for a quick test)
     python geocode_data.py --retry-failed  # also retry addresses Neshan couldn't find before
+    python geocode_data.py --check-only    # only re-run the free location checks (no API key)
 
 The Neshan API key is read from the NESHAN_API_KEY environment variable or
 from a local `.env` file (NESHAN_API_KEY=...), which is git-ignored.
@@ -16,6 +17,7 @@ import json
 import math
 import statistics
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -160,6 +162,83 @@ def validate(db, key):
         approx += bool(c["geocode"].get("approx"))
     print(f"Validation: {fixed} wrong-city results fixed, {fallback} moved to their city center, "
           f"{approx} centers marked approximate.")
+    flag_wrong_area(db)
+
+
+# ---------- Wrong-neighborhood check (free, uses only our own data) ----------
+# Centers in the same city often name the same area in their address
+# ("تهران - پاسداران - ..."). Where enough of them do, their points show where that
+# area is; a center whose point is far from its own area was probably matched to a
+# same-named street elsewhere (e.g. آرینا, «پاسداران - نگارستان دوم», placed 18 km away).
+AREA_PREFIX = re.compile(r"^(خیابان|خ\.?|بلوار|بلو|میدان|م\.?|فلکه|چهارراه|سه\s*راه|سه\s*راهی|تقاطع|ابتدای|"
+                         r"انتهای|اول|نرسیده به|بعد از|قبل از|بالاتر از|پایین\s*تر از|روبروی|رو\s*به\s*روی|"
+                         r"جنب|نبش|ضلع\s*\S+|شمال|جنوب|غرب|شرق)\s+")
+# Too long to have one location, or too generic to name one place.
+AREA_SKIP = re.compile(r"^(بزرگراه|اتوبان|جاده|آزادراه)")
+AREA_GENERIC = re.compile(r"پلاک|طبقه|واحد|کوچه|ساختمان|مجتمع|کد\s*پستی|بن\s*بست|پاساژ|برج|^\d|^فاز|"
+                          r"^(اول|دوم|سوم|چهارم|پنجم|ششم|هفتم|هشتم|نهم|دهم|یکم|امام|شهید|اصلی|مرکزی)$")
+AREA_MIN_CENTERS = 4     # different addresses needed to learn where an area is
+AREA_MAX_SPREAD_KM = 2.5  # areas whose centers are spread wider than this are not used
+AREA_MIN_KM = 3.0         # flag when farther than this (and 4x the area's own spread)
+
+
+def _norm(s):
+    return re.sub(r"\s+", " ", (s or "").replace("\u200c", " ").replace("ي", "ی").replace("ك", "ک")).strip()
+
+
+def address_areas(c, city_names):
+    """Area names at the start of the address, most general first ([] = don't check)."""
+    out = []
+    for part in [_norm(p) for p in re.split(r"[-–،,]", c["address"])][:4]:
+        if not part or part in (c["city"], c["province"]):
+            continue
+        if AREA_SKIP.match(part):
+            break
+        bare = part
+        for _ in range(3):
+            bare = AREA_PREFIX.sub("", bare)
+        if part in city_names or bare in city_names:
+            return []  # the address names another town; its streets aren't in c["city"]
+        if AREA_GENERIC.search(bare) or not 3 <= len(bare) <= 25:
+            continue
+        out.append(bare)
+    return out[:2]
+
+
+def flag_wrong_area(db):
+    """Mark located centers whose point is far from their own neighborhood."""
+    active = [c for c in db["centers"] if not c.get("deleted") and c.get("location")]
+    city_names = {_norm(c["city"]) for c in active} | {_norm(c["province"]) for c in active}
+    areas_of = {c["id"]: address_areas(c, city_names) for c in active}
+    points = {}
+    for c in active:
+        for a in areas_of[c["id"]]:
+            points.setdefault((c["province"], c["city"], a), {})[c["address"]] = c["location"]
+    known = {}
+    for key, locs in points.items():
+        pts = list(locs.values())
+        if len(pts) < AREA_MIN_CENTERS:
+            continue
+        mid = median_point(pts)
+        spread = statistics.median(km(p, mid) for p in pts)
+        if spread <= AREA_MAX_SPREAD_KM:
+            known[key] = (mid, spread)
+    flagged = 0
+    for c in active:
+        c["geocode"].pop("suspect", None)
+        if c["geocode"].get("source") == "manual":
+            continue
+        for a in areas_of[c["id"]]:
+            if (c["province"], c["city"], a) not in known:
+                continue
+            mid, spread = known[(c["province"], c["city"], a)]
+            d = km(c["location"], mid)
+            if d > max(AREA_MIN_KM, 4 * spread):
+                c["geocode"]["suspect"] = {"area": a, "km": round(d, 1)}
+                flagged += 1
+            break  # judge by the most general area that is known
+    print(f"Neighborhood check: {len(known)} areas learned, {flagged} centers flagged as possibly misplaced.")
+    return flagged
 
 
 def address_key(c):
@@ -171,7 +250,14 @@ def main():
     ap.add_argument("--limit", type=int, help="geocode at most this many addresses")
     ap.add_argument("--retry-failed", action="store_true",
                     help="retry addresses that were not found in a previous run")
+    ap.add_argument("--check-only", action="store_true",
+                    help="only re-run the free neighborhood check (no API calls)")
     args = ap.parse_args()
+    if args.check_only:
+        db = load()
+        flag_wrong_area(db)
+        save(db)
+        return
     key = api_key()
     db = load()
     centers = db["centers"]
