@@ -100,6 +100,14 @@
     return `آدرس این مرکز در «${s.area}» است، اما نقطه ثبت‌شده روی نقشه حدود ${toFa(Math.round(s.km))} کیلومتر دورتر است.`;
   }
 
+  // Google Maps search for the place itself: its kind and name in its city
+  // («تصویربرداری آرینا تهران»), skipping words the name already contains.
+  function nameSearchUrl(it) {
+    const kind = it.type.includes("(") ? it.type.split("(")[0].replace("بخش", "").trim() : it.type;
+    const parts = [it.name.includes(kind) ? "" : kind, it.name, it.name.includes(it.city) ? "" : it.city];
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(parts.filter(Boolean).join(" "))}`;
+  }
+
   const addressSearchUrl = (it) =>
     `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${it.name} ${it.address} ${it.city}`.slice(0, 200))}`;
 
@@ -1076,7 +1084,8 @@
       <input class="edit-coords" id="editCoords" dir="ltr" placeholder="35.7575, 51.4100">
       <p class="hint">نشانگر را بکشید، روی نقشه کلیک کنید، یا مختصات را از Google Maps (کلیک راست روی محل) جای‌گذاری کنید.</p>
       <div class="admin-actions">
-        <a class="btn ghost small" target="_blank" rel="noopener" href="${addressSearchUrl(it)}">جستجو در Google Maps</a>
+        <a class="btn ghost small" target="_blank" rel="noopener" href="${nameSearchUrl(it)}">جستجوی نام در Google Maps</a>
+        <a class="btn ghost small" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${it.address} ${it.city}`)}">جستجوی آدرس</a>
         <button type="button" class="btn primary small" data-admin="save">ذخیره موقعیت</button>
         ${it.location ? '<button type="button" class="btn ghost small" data-admin="verify">موقعیت فعلی درست است</button>' : ""}
         <button type="button" class="btn ghost small" data-admin="cancel">انصراف</button>
