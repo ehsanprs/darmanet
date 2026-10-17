@@ -115,6 +115,28 @@ into numbered clusters; approximate locations have a dashed pin.
 - Leaflet 1.9.4 and Leaflet.markercluster 1.5.3 are stored in `site/assets/vendor/`
   and loaded only when the map is opened. The map tiles need internet; the list works offline.
 
+## Admin mode: fixing a location by hand
+
+1. **One-time setup** – create a GitHub token: GitHub → Settings → Developer settings →
+   Personal access tokens → **Fine-grained tokens** → Generate new token. Repository access:
+   *Only select repositories* → `darmanet`; Permissions → Repository → **Contents: Read and
+   write**. Choose an expiry (e.g. 1 year).
+2. Open the site once with **`?admin`** at the end of the address
+   (`https://ehsanprs.github.io/darmanet/?admin`). Admin mode stays on in that browser until
+   you click «خروج از حالت مدیر»; the address bar drops `admin`, so links you share don't
+   include it.
+3. Click «توکن GitHub» in the yellow admin bar and paste the token (it is stored only in
+   that browser).
+4. On any card click **«ویرایش موقعیت»**: the map opens with a draggable pin. Drag it, click
+   the map, or paste coordinates / a Google Maps link (in Google Maps, right-click the place
+   and click the coordinates to copy them), then **«ذخیره موقعیت»**. «موقعیت فعلی درست است»
+   marks the current point as checked.
+
+Each save commits to `site/data/manual_locations.json`; GitHub Pages republishes within about
+a minute. Manual points are applied on top of the data, are never changed by the scripts, and
+are never flagged. The `.bat` scripts run `git pull` first so your local copy includes them.
+Without a valid token nobody can save, even if they find `?admin`.
+
 ## Data cleaning
 
 - The source repeats every record (about half the pages are duplicates); duplicates are removed.

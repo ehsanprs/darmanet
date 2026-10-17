@@ -8,12 +8,34 @@ ROOT = Path(__file__).parent
 DATA_DIR = ROOT / "site" / "data"
 JSON_PATH = DATA_DIR / "centers.json"
 JS_PATH = DATA_DIR / "centers.js"
+# Points set by hand in the website's admin mode (committed through the GitHub API).
+MANUAL_PATH = DATA_DIR / "manual_locations.json"
+
+
+def load_manual():
+    if not MANUAL_PATH.exists():
+        return {}
+    return {k: v for k, v in json.loads(MANUAL_PATH.read_text(encoding="utf-8")).items()
+            if not k.startswith("_")}
+
+
+def apply_manual(db):
+    """Put hand-set points on their centers; scripts never change "manual" points."""
+    manual = load_manual()
+    for c in db["centers"]:
+        m = manual.get(c["id"])
+        if m:
+            c["location"] = {"lat": m["lat"], "lng": m["lng"]}
+            c["geocode"] = {"source": "manual", "at": m.get("at")}
+    return len(manual)
 
 
 def load():
     if not JSON_PATH.exists():
         return {"meta": {}, "centers": []}
-    return json.loads(JSON_PATH.read_text(encoding="utf-8"))
+    db = json.loads(JSON_PATH.read_text(encoding="utf-8"))
+    apply_manual(db)
+    return db
 
 
 def save(db):

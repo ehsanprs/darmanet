@@ -29,6 +29,7 @@
     phone: "M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2",
     copy: "M9 9h11v11H9zM5 15H4V4h11v1",
     nav: "M3 11 21 3l-8 18-2-8z",
+    edit: "M4 20h4L19 9l-4-4L4 16zm10-14 4 4",
     map: "M9 4 3 6v14l6-2 6 2 6-2V4l-6 2zM9 4v14m6-12v14",
     search: "M4 11a7 7 0 1 0 14 0 7 7 0 1 0-14 0m16.5 9.5L16 16",
     x: "M6 6l12 12M18 6 6 18",
@@ -263,6 +264,31 @@
     const d = new Date(db.meta.updated);
     el.updated.textContent = isNaN(d) ? db.meta.updated
       : new Intl.DateTimeFormat("fa-IR", { dateStyle: "long" }).format(d);
+  }
+
+  const toLatinDigits = (s) => String(s)
+    .replace(/[۰-۹]/g, (d) => d.charCodeAt(0) - 0x06f0).replace(/[٠-٩]/g, (d) => d.charCodeAt(0) - 0x0660);
+
+  // Points set by hand in admin mode; published next to the data and applied on load.
+  async function loadManual() {
+    try {
+      const res = await fetch("data/manual_locations.json", { cache: "no-store" });
+      if (!res.ok) return {};
+      const data = await res.json();
+      return Object.fromEntries(Object.entries(data).filter(([k]) => !k.startsWith("_")));
+    } catch (e) {
+      return {}; // offline or opened from disk: the data file already contains them
+    }
+  }
+
+  function applyManual(db, manual) {
+    for (const c of db.centers) {
+      const m = manual[c.id];
+      if (m) {
+        c.location = { lat: m.lat, lng: m.lng };
+        c.geocode = { source: "manual", at: m.at };
+      }
+    }
   }
 
   async function load() {
@@ -511,6 +537,7 @@
         ${calls}${rawPhone}
         ${navMenu(it)}
         ${it.location ? `<button type="button" class="btn ghost" data-locate="${it.id}">${icon("map")}روی نقشه</button>` : ""}
+        ${ADMIN ? `<button type="button" class="btn ghost admin-edit" data-edit="${it.id}">${icon("edit")}ویرایش موقعیت</button>` : ""}
         <a class="btn ghost" href="https://www.google.com/search?q=${googleQ}" target="_blank" rel="noopener" title="جستجوی این مرکز در گوگل (نقشه، نظرات، ساعت کاری)">${icon("search")}جستجو در گوگل</a>
         ${it.address ? `<button type="button" class="btn ghost" data-copy="${escapeHtml(it.address)}" title="کپی آدرس">${icon("copy")}کپی آدرس</button>` : ""}
       </div>
@@ -888,6 +915,210 @@
     }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
   }
 
+  // ---------- Admin mode (hidden) ----------
+  // Open the site once with ?admin to turn it on in this browser. Saving needs a GitHub
+  // token with write access to the repository; it is kept only in this browser and the
+  // change is committed to site/data/manual_locations.json, which GitHub Pages republishes.
+  const GH = { owner: "ehsanprs", repo: "darmanet", branch: "main", path: "site/data/manual_locations.json" };
+  const ADMIN = (() => {
+    const asked = new URLSearchParams(location.search).has("admin");
+    try {
+      if (asked) localStorage.setItem("darmanet.admin", "1");
+      return localStorage.getItem("darmanet.admin") === "1";
+    } catch (e) {
+      return asked;
+    }
+  })();
+  const adminState = { editing: null, marker: null, panel: null };
+
+  const ghToken = () => { try { return localStorage.getItem("darmanet.ghToken") || ""; } catch (e) { return ""; } };
+
+  const b64encode = (text) => {
+    let bin = "";
+    new TextEncoder().encode(text).forEach((b) => { bin += String.fromCharCode(b); });
+    return btoa(bin);
+  };
+  const b64decode = (b64) => new TextDecoder().decode(Uint8Array.from(atob(b64.replace(/\n/g, "")), (ch) => ch.charCodeAt(0)));
+
+  async function github(method, body) {
+    const url = `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${GH.path}`;
+    const res = await fetch(method === "GET" ? `${url}?ref=${GH.branch}` : url, {
+      method,
+      cache: "no-store",
+      headers: { Authorization: `Bearer ${ghToken()}`, Accept: "application/vnd.github+json" },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (res.status === 401) throw new Error("توکن GitHub نامعتبر است یا منقضی شده.");
+    if (res.status === 403 || res.status === 404) throw new Error("این توکن اجازه نوشتن در مخزن را ندارد.");
+    return res;
+  }
+
+  async function saveManual(it, lat, lng) {
+    const today = new Date().toISOString().slice(0, 10);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const cur = await (await github("GET")).json();
+      const data = JSON.parse(b64decode(cur.content));
+      data[it.id] = { lat: +lat.toFixed(6), lng: +lng.toFixed(6), at: today, name: it.name };
+      const res = await github("PUT", {
+        message: `Admin: set location of ${it.name} (${it.city})`,
+        content: b64encode(JSON.stringify(data, null, 2) + "\n"),
+        sha: cur.sha,
+        branch: GH.branch,
+      });
+      if (res.ok) return;
+      if (res.status !== 409 && res.status !== 422) throw new Error(`خطای GitHub (${res.status})`);
+      // Someone else saved meanwhile: read the new version and try again.
+    }
+    throw new Error("ذخیره به دلیل تغییر هم‌زمان انجام نشد؛ دوباره تلاش کنید.");
+  }
+
+  function parseCoords(text) {
+    const t = toLatinDigits(text || "");
+    const m = t.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/) || t.match(/@(-?\d+\.\d+),\s*(-?\d+\.\d+)/) ||
+      t.match(/(-?\d{1,2}\.\d+)\s*[,،\s]\s*(-?\d{1,2}\.\d+)/);
+    if (!m) return null;
+    const lat = +m[1];
+    const lng = +m[2];
+    return lat > 24 && lat < 41 && lng > 43 && lng < 64.5 ? { lat, lng } : null;
+  }
+
+  function adminBar() {
+    const bar = document.createElement("div");
+    bar.className = "admin-bar";
+    bar.innerHTML = `<b>حالت مدیر</b><span id="adminTokenState"></span>
+      <button type="button" class="link-btn" id="adminTokenBtn">توکن GitHub</button>
+      <button type="button" class="link-btn" id="adminExit">خروج از حالت مدیر</button>`;
+    document.body.prepend(bar);
+    const refresh = () => {
+      $("adminTokenState").textContent = ghToken() ? "· توکن تنظیم شده" : "· برای ذخیره، توکن GitHub را تنظیم کنید";
+    };
+    refresh();
+    $("adminTokenBtn").addEventListener("click", () => {
+      const dlg = document.createElement("dialog");
+      dlg.className = "admin-dialog";
+      dlg.innerHTML = `<form method="dialog">
+          <h3>توکن GitHub</h3>
+          <p class="hint">یک توکن fine-grained فقط برای مخزن ${GH.owner}/${GH.repo} با دسترسی «Contents: Read and write» بسازید و اینجا وارد کنید. توکن فقط در همین مرورگر ذخیره می‌شود.</p>
+          <input type="password" id="adminTokenInput" dir="ltr" autocomplete="off" placeholder="github_pat_…">
+          <div class="admin-actions">
+            <button value="save" class="btn primary small">ذخیره</button>
+            <button value="clear" class="btn ghost small">حذف توکن</button>
+            <button value="cancel" class="btn ghost small">انصراف</button>
+          </div></form>`;
+      document.body.appendChild(dlg);
+      dlg.addEventListener("close", async () => {
+        const value = dlg.querySelector("#adminTokenInput").value.trim();
+        try {
+          if (dlg.returnValue === "save" && value) localStorage.setItem("darmanet.ghToken", value);
+          if (dlg.returnValue === "clear") localStorage.removeItem("darmanet.ghToken");
+        } catch (e) { toast("ذخیره توکن در این مرورگر ممکن نیست"); }
+        dlg.remove();
+        refresh();
+        if (dlg.returnValue === "save" && value) {
+          try {
+            await (await github("GET")).json();
+            toast("توکن کار می‌کند ✓");
+          } catch (err) { toast(err.message); }
+        }
+      });
+      dlg.showModal();
+    });
+    $("adminExit").addEventListener("click", () => {
+      try { localStorage.removeItem("darmanet.admin"); } catch (e) { /* ignore */ }
+      location.reload();
+    });
+  }
+
+  function closeEditor() {
+    if (adminState.marker) adminState.marker.remove();
+    if (adminState.panel) adminState.panel.remove();
+    if (mapState.map) mapState.map.off("click", onEditClick);
+    Object.assign(adminState, { editing: null, marker: null, panel: null });
+  }
+
+  function onEditClick(e) {
+    adminState.marker.setLatLng(e.latlng);
+    showEditPoint(e.latlng);
+  }
+
+  function showEditPoint(ll) {
+    const input = adminState.panel && adminState.panel.querySelector(".edit-coords");
+    if (input) input.value = `${ll.lat.toFixed(6)}, ${ll.lng.toFixed(6)}`;
+  }
+
+  async function editLocation(id) {
+    const it = byId.get(id);
+    if (!it) return;
+    closeEditor();
+    hidePreview();
+    if (!state.map) await openMap();
+    if (!mapState.map) return;
+    const L = window.L;
+    const start = it.location ? [it.location.lat, it.location.lng] : mapState.map.getCenter();
+    adminState.editing = it;
+    adminState.marker = L.marker(start, {
+      draggable: true, zIndexOffset: 2000, autoPan: true,
+      icon: L.divIcon({ className: "pin-wrap", iconSize: [30, 30], iconAnchor: [15, 36],
+        html: `<div class="pin edit-pin"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS.edit}"/></svg></div>` }),
+    }).addTo(mapState.map);
+    adminState.marker.on("dragend", () => showEditPoint(adminState.marker.getLatLng()));
+    mapState.map.on("click", onEditClick);
+    moveMap((m) => m.setView(start, Math.max(m.getZoom(), 16)));
+
+    const g = it.geocode || {};
+    const panel = document.createElement("div");
+    panel.className = "edit-panel";
+    panel.innerHTML = `
+      <h4>${escapeHtml(it.name)}</h4>
+      <p class="muted">${escapeHtml(it.type)} · ${escapeHtml(it.city)}<br>${escapeHtml(it.address)}</p>
+      <p class="muted">منبع فعلی: ${escapeHtml(g.source || "بدون موقعیت")}${g.approx ? " · تقریبی" : ""}${g.suspect ? " · احتمالاً نادرست" : ""}</p>
+      <label class="muted" for="editCoords">مختصات یا لینک Google Maps</label>
+      <input class="edit-coords" id="editCoords" dir="ltr" placeholder="35.7575, 51.4100">
+      <p class="hint">نشانگر را بکشید، روی نقشه کلیک کنید، یا مختصات را از Google Maps (کلیک راست روی محل) جای‌گذاری کنید.</p>
+      <div class="admin-actions">
+        <a class="btn ghost small" target="_blank" rel="noopener" href="${addressSearchUrl(it)}">جستجو در Google Maps</a>
+        <button type="button" class="btn primary small" data-admin="save">ذخیره موقعیت</button>
+        ${it.location ? '<button type="button" class="btn ghost small" data-admin="verify">موقعیت فعلی درست است</button>' : ""}
+        <button type="button" class="btn ghost small" data-admin="cancel">انصراف</button>
+      </div>`;
+    el.mapPanel.appendChild(panel);
+    adminState.panel = panel;
+    showEditPoint(adminState.marker.getLatLng());
+    const input = panel.querySelector(".edit-coords");
+    input.addEventListener("input", () => {
+      const p = parseCoords(input.value);
+      if (p) {
+        adminState.marker.setLatLng([p.lat, p.lng]);
+        moveMap((m) => m.panTo([p.lat, p.lng]));
+      }
+    });
+    panel.addEventListener("click", async (e) => {
+      const action = e.target.closest("[data-admin]")?.dataset.admin;
+      if (!action) return;
+      if (action === "cancel") return closeEditor();
+      if (!ghToken()) return toast("ابتدا توکن GitHub را از نوار بالا تنظیم کنید");
+      const p = action === "verify" ? it.location : parseCoords(input.value);
+      if (!p) return toast("مختصات معتبر داخل ایران وارد کنید");
+      e.target.disabled = true;
+      try {
+        await saveManual(it, p.lat, p.lng);
+        it.location = { lat: +p.lat.toFixed(6), lng: +p.lng.toFixed(6) };
+        it.geocode = { source: "manual", at: new Date().toISOString().slice(0, 10) };
+        const old = mapState.markers.get(it.id);
+        if (old) mapState.cluster.removeLayer(old);
+        mapState.markers.delete(it.id);
+        mapState.sig = null;
+        listSig = "";
+        closeEditor();
+        apply();
+        toast("ذخیره شد ✓ حدود یک دقیقه دیگر روی سایت منتشر می‌شود");
+      } catch (err) {
+        toast(err.message);
+        e.target.disabled = false;
+      }
+    });
+  }
+
   // ---------- Events ----------
   function change(fn, scroll = true) {
     fn();
@@ -978,6 +1209,8 @@
     if (copyBtn) copy(copyBtn.dataset.copy);
     const locate = e.target.closest("[data-locate]");
     if (locate) focusCenter(locate.dataset.locate);
+    const edit = ADMIN && e.target.closest("[data-edit]");
+    if (edit) editLocation(edit.dataset.edit);
     if (e.target.closest(".preview-close")) hidePreview();
   });
   el.cards.addEventListener("mouseover", (e) => {
@@ -1018,7 +1251,7 @@
   el.applyFilters.addEventListener("click", () => { closeSheet(); change(() => {}); });
   el.backdrop.addEventListener("click", closeSheet);
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") { closeMenus(); closeSheet(); hidePreview(); }
+    if (e.key === "Escape") { closeMenus(); closeSheet(); hidePreview(); closeEditor(); }
     if (e.key === "/" && document.activeElement !== el.q && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) {
       e.preventDefault();
       el.q.focus();
@@ -1055,7 +1288,9 @@
 
   // ---------- Init ----------
   el.cards.innerHTML = '<div class="skeleton"></div>'.repeat(4);
-  load().then((db) => {
+  if (ADMIN) adminBar();
+  load().then(async (db) => {
+    applyManual(db, await loadManual());
     prepare(db);
     readUrl();
     el.q.value = state.q;

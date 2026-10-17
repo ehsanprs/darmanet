@@ -157,6 +157,8 @@ def validate(db, key):
         addresses.setdefault((c["location"]["lat"], c["location"]["lng"]), set()).add(c["address"])
     approx = 0
     for c in active:
+        if c["geocode"].get("source") == "manual":
+            continue
         if len(addresses[(c["location"]["lat"], c["location"]["lng"])]) >= SHARED_POINT_MIN:
             c["geocode"]["approx"] = True
         approx += bool(c["geocode"].get("approx"))

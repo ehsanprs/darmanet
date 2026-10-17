@@ -1,0 +1,3 @@
+{
+  "_help": "Map points set by hand in the website admin mode (?admin). Keyed by center id; scripts never overwrite these."
+}
