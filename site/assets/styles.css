@@ -455,8 +455,9 @@ body.map-mode .cards { grid-template-columns: 1fr; }
 .pop h4 { margin: 0 0 2px; font-size: 15px; font-weight: 700; line-height: 1.6; color: var(--text); }
 .pop .muted { font-size: 13px; color: var(--text-2); }
 .pop .pop-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
-.map-panel .pop .pop-actions a { font-size: 13px; padding: 6px 12px; border-radius: 8px; text-decoration: none; font-weight: 500; }
+.map-panel .pop .pop-actions a, .map-panel .pop .pop-actions button { font-family: var(--font); cursor: pointer; font-size: 13px; padding: 6px 12px; border-radius: 8px; text-decoration: none; font-weight: 500; }
 .map-panel .pop .pop-actions .call { background: var(--primary); color: var(--on-primary); }
+.map-panel .pop .pop-actions .admin-edit { border-style: dashed; }
 .map-panel .pop .pop-actions .ghost { border: 1px solid var(--border); color: var(--text); background: var(--surface); }
 .locate-btn {
   width: 36px; height: 36px; display: grid; place-items: center; background: var(--surface); color: var(--text);

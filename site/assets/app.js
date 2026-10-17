@@ -779,6 +779,7 @@
           ${phone ? `<a class="call" href="tel:${phone}">تماس ${toFa(formatPhone(phone))}</a>` : ""}
           ${locQuality(it) === "ok" ? "" : `<a class="ghost" href="${addressSearchUrl(it)}" target="_blank" rel="noopener">جستجوی آدرس</a>`}
           <a class="ghost" href="https://www.google.com/maps/dir/?api=1&destination=${ll}" target="_blank" rel="noopener">مسیریابی</a>
+          ${ADMIN ? `<button type="button" class="ghost admin-edit" data-edit="${it.id}">ویرایش موقعیت</button>` : ""}
         </div>
       </div>`;
   }
@@ -790,6 +791,9 @@
     }
     marker.unbindPopup();
     marker.bindPopup(popupHtml(it), { maxWidth: 300 }).openPopup();
+    // Leaflet keeps clicks inside popups from reaching the page, so bind the admin button here.
+    const editBtn = ADMIN && marker.getPopup().getElement().querySelector("[data-edit]");
+    if (editBtn) editBtn.addEventListener("click", () => { marker.closePopup(); editLocation(it.id); });
     if (fromMap) {
       // Load more of the list until the clicked center's card exists, then show it.
       const idx = filtered.indexOf(it);
