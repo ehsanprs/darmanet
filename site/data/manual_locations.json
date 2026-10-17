@@ -1,3 +1,9 @@
 {
-  "_help": "Map points set by hand in the website admin mode (?admin). Keyed by center id; scripts never overwrite these."
+  "_help": "Map points set by hand in the website admin mode (?admin). Keyed by center id; scripts never overwrite these.",
+  "dfb3d9f1af": {
+    "lat": 35.802797,
+    "lng": 51.461255,
+    "at": "2026-10-17",
+    "name": "درمان واریس دکتر مهرداد اقدسی"
+  }
 }
