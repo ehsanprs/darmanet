@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="درمانت">
+  <title>درمانت</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#14b8a6"/>
+      <stop offset="1" stop-color="#0f766e"/>
+    </linearGradient>
+  </defs>
+  <!-- Teal rounded square -->
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <!-- Soft shadow under the pin -->
+  <ellipse cx="256" cy="436" rx="70" ry="14" fill="#0b3f3b" opacity=".25"/>
+  <!-- White map pin: a circle (center 256,222 r 134) tapering to a point at 256,428 -->
+  <path d="M256 88c-74 0-134 60-134 134 0 98 134 206 134 206s134-108 134-206c0-74-60-134-134-134z" fill="#fff"/>
+  <!-- Medical cross inside the pin -->
+  <path d="M232 156h48v52h52v48h-52v52h-48v-52h-52v-48h52z" fill="#0f766e"/>
+</svg>

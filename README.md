@@ -115,6 +115,24 @@ into numbered clusters; approximate locations have a dashed pin.
 - Leaflet 1.9.4 and Leaflet.markercluster 1.5.3 are stored in `site/assets/vendor/`
   and loaded only when the map is opened. The map tiles need internet; the list works offline.
 
+## Install as a phone app
+
+The site is an installable web app (`site/manifest.json`, `site/sw.js`). On phones a small
+banner offers «نصب» a few seconds after the first visit (again 30 days after «بعداً»), and the
+footer always has «📱 نصب روی گوشی»:
+- **Android (Chrome, Edge, Samsung Internet):** one tap installs it.
+- **iPhone (Safari):** there is no install button in iOS, so the banner shows the steps
+  (Share ⬆ → Add to Home Screen → Add).
+- Inside Telegram / WhatsApp / Instagram the page must first be opened in the real browser.
+
+The installed app opens offline (the service worker keeps the page, data, fonts and icons; map
+tiles still need internet). Pages and data are always fetched fresh when online. If you change
+the logo, fonts or files under `assets/vendor/`, bump `CACHE` in `site/sw.js` (e.g.
+`darmanet-v2`) so installed apps pick them up.
+
+The logo is `site/assets/logo.svg`; the PNG app icons are drawn by `make_icons.py`
+(needs Pillow: `.venv\Scripts\pip install pillow`).
+
 ## Admin mode: fixing a location by hand
 
 1. **One-time setup** – create a GitHub token: GitHub → Settings → Developer settings →

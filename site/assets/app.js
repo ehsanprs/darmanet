@@ -1299,6 +1299,84 @@
     else apply();
   });
 
+  // ---------- Install as an app ----------
+  // Android/desktop Chrome and Edge offer a real install prompt; iPhone Safari and others
+  // only have "Add to Home Screen" in their menus, so we show the steps instead.
+  const installEl = {
+    banner: $("installBanner"), now: $("installNow"), later: $("installLater"),
+    steps: $("installSteps"), link: $("installLink"),
+  };
+  // An older cached page may not have the banner yet; then skip this part.
+  if (installEl.banner) {
+    let installPrompt = null;
+    const standalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    const inAppBrowser = /Telegram|Instagram|FBAN|FBAV|WhatsApp|Line\/|; wv\)/i.test(navigator.userAgent);
+
+    function installSteps() {
+      if (isIOS) {
+        return ['در Safari روی دکمه <span class="key">اشتراک‌گذاری ⬆</span> پایین (یا بالای) صفحه بزنید.',
+          'گزینه <span class="key">Add to Home Screen</span> (افزودن به صفحه اصلی) را انتخاب کنید.',
+          'روی <span class="key">Add</span> بزنید.'];
+      }
+      const steps = [];
+      if (inAppBrowser) steps.push("اگر صفحه داخل تلگرام، واتساپ یا اینستاگرام باز شده، ابتدا آن را در مرورگر Chrome باز کنید.");
+      steps.push('منوی مرورگر <span class="key">⋮</span> را باز کنید.',
+        'گزینه <span class="key">نصب برنامه</span> یا <span class="key">افزودن به صفحه اصلی</span> را انتخاب کنید.');
+      return steps;
+    }
+
+    function showInstall(withSteps) {
+      if (standalone()) return;
+      installEl.steps.hidden = !withSteps;
+      installEl.steps.innerHTML = withSteps ? installSteps().map((s) => `<li>${s}</li>`).join("") : "";
+      installEl.now.hidden = withSteps && !installPrompt;
+      installEl.banner.hidden = false;
+    }
+
+    function hideInstall(remember) {
+      installEl.banner.hidden = true;
+      if (remember) {
+        try { localStorage.setItem("darmanet.installLater", String(Date.now())); } catch (e) { /* ignore */ }
+      }
+    }
+
+    window.addEventListener("beforeinstallprompt", (e) => {
+      e.preventDefault();
+      installPrompt = e;
+      if (!installEl.banner.hidden) installEl.now.hidden = false;
+    });
+    window.addEventListener("appinstalled", () => {
+      hideInstall(false);
+      installEl.link.parentElement.hidden = true;
+      toast("درمانت نصب شد ✓");
+    });
+
+    installEl.now.addEventListener("click", async () => {
+      if (!installPrompt) return showInstall(true);
+      installPrompt.prompt();
+      const { outcome } = await installPrompt.userChoice;
+      installPrompt = null;
+      hideInstall(outcome !== "accepted");
+    });
+    installEl.later.addEventListener("click", () => hideInstall(true));
+    installEl.link.addEventListener("click", () => (installPrompt ? installEl.now.click() : showInstall(true)));
+
+    if (!standalone()) {
+      installEl.link.parentElement.hidden = false;
+      // Offer it once on phones, a few seconds after the first visit; again after 30 days if dismissed.
+      let snoozed = false;
+      try { snoozed = Date.now() - Number(localStorage.getItem("darmanet.installLater") || 0) < 30 * 864e5; } catch (e) { /* ignore */ }
+      if (mobile.matches && !snoozed) setTimeout(() => showInstall(isIOS), 4000);
+    }
+
+  }
+
+  if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+    navigator.serviceWorker.register("sw.js").catch((err) => console.warn("service worker:", err));
+  }
+
   // ---------- Init ----------
   el.cards.innerHTML = '<div class="skeleton"></div>'.repeat(4);
   if (ADMIN) adminBar();

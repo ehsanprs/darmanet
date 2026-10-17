@@ -7,7 +7,14 @@
   <meta name="description" content="درمانت: جستجوی سریع مراکز درمانی، آزمایشگاه‌ها، دندانپزشکی‌ها و مطب‌های طرف قرارداد با بیمه سامان در سراسر ایران">
   <meta name="color-scheme" content="light dark">
   <meta name="theme-color" content="#0f766e">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f766e'/%3E%3Cpath d='M13 7h6v6h6v6h-6v6h-6v-6H7v-6h6z' fill='white'/%3E%3C/svg%3E">
+  <link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+  <link rel="icon" href="assets/icons/favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="درمانت">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="preload" href="assets/fonts/Vazirmatn-wght.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="assets/styles.css">
 </head>
@@ -17,9 +24,7 @@
   <header class="hero">
     <div class="container">
       <div class="brand">
-        <span class="brand-mark" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M9.5 3h5v6.5H21v5h-6.5V21h-5v-6.5H3v-5h6.5z"/></svg>
-        </span>
+        <img class="brand-mark" src="assets/logo.svg" width="48" height="48" alt="" aria-hidden="true">
         <div>
           <h1>درمانت</h1>
           <p class="tagline">مراکز طرف قرارداد با بیمه سامان</p>
@@ -171,13 +176,28 @@
     <div class="container">
       <p>منبع اطلاعات: <a href="https://darmanet.ir/table/" target="_blank" rel="noopener">darmanet.ir</a>
         · آخرین به‌روزرسانی: <span id="updated">—</span>
-        · <a href="data/darmanet_all_provinces.xlsx" download>دانلود فایل اکسل کامل</a></p>
+        · <a href="data/darmanet_all_provinces.xlsx" download>دانلود فایل اکسل کامل</a>
+        <span class="install-link-wrap" hidden>· <button type="button" class="link-btn install-link" id="installLink">📱 نصب روی گوشی</button></span></p>
       <p class="muted">این وب‌سایت غیررسمی است و ارتباطی با بیمه سامان یا darmanet.ir ندارد؛ اطلاعات از منبع عمومی بالا گردآوری شده است.</p>
       <p class="muted">پیش از مراجعه، لطفاً با مرکز درمانی تماس بگیرید و از برقراری قرارداد اطمینان حاصل کنید.</p>
     </div>
   </footer>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <!-- "Install as an app" banner (mobile) and step-by-step help where browsers have no install button -->
+  <div class="install-banner" id="installBanner" role="dialog" aria-labelledby="installTitle" hidden>
+    <img src="assets/icons/icon-192.png" width="48" height="48" alt="">
+    <div class="install-text">
+      <b id="installTitle">درمانت را روی گوشی نصب کنید</b>
+      <span>مثل یک برنامه، با یک لمس از صفحه اصلی گوشی باز می‌شود؛ حتی بدون اینترنت.</span>
+      <ol class="install-steps" id="installSteps" hidden></ol>
+    </div>
+    <div class="install-actions">
+      <button type="button" class="btn primary small" id="installNow">نصب</button>
+      <button type="button" class="link-btn" id="installLater">بعداً</button>
+    </div>
+  </div>
 
   <script src="data/centers.js"></script>
   <script src="assets/app.js"></script>
