@@ -155,6 +155,19 @@ a minute. Manual points are applied on top of the data, are never changed by the
 are never flagged. The `.bat` scripts run `git pull` first so your local copy includes them.
 Without a valid token nobody can save, even if they find `?admin`.
 
+## Tehran districts (منطقه ۱ تا ۲۲)
+
+Every center in the **city of Tehran** gets `district` (1–22) from its map point, using the
+22 municipal district boundaries from OpenStreetMap in `site/data/tehran_districts.json`
+(downloaded by `make_districts.py`; © OpenStreetMap contributors, ODbL). Districts are
+recomputed whenever the data is saved, so they follow admin location edits automatically.
+A check of 30 random centers against Neshan's own district number agreed on 29 (the other
+was on the district 3/4 border). Centers whose point is outside the 22 districts have no
+district (several are addresses in other towns such as اسلامشهر, قرچک or فردیس).
+`.venv\Scripts\python districts.py` writes `district_review.txt`: centers with no
+district, doubtful points, and centers whose district differs from most others on the same
+street (often fine on streets that form district borders).
+
 ## Data cleaning
 
 - The source repeats every record (about half the pages are duplicates); duplicates are removed.

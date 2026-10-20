@@ -40,6 +40,9 @@ def load():
 
 def save(db):
     centers = db["centers"]
+    # Tehran districts follow the map points, so refresh them on every save.
+    from districts import assign  # imported here: districts.py imports this module
+    assign(centers)
     db["meta"].update({
         "count": sum(1 for c in centers if not c.get("deleted")),
         "deleted": sum(1 for c in centers if c.get("deleted")),

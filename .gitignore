@@ -9,3 +9,4 @@ __pycache__/
 *.tmp
 tag_report.txt
 location_review.txt
+district_review.txt
