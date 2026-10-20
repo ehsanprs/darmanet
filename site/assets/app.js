@@ -686,8 +686,9 @@
     return mapState.loading;
   }
 
+  // Every filter that changes which centers match must be listed here, or the map keeps old pins.
   const filterSig = () => [state.q, state.province, state.city, state.cat, [...state.svcs].join(","),
-    state.ins, state.online, state.phone, state.allDay].join("|");
+    state.ins, state.online, state.phone, state.allDay, state.locSrc].join("|");
 
   function mapBounds() {
     const b = mapState.map.getBounds();
