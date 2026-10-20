@@ -195,6 +195,16 @@
   let filtered = [];
   let mapItems = []; // matches every filter except the map area
   let listSig = "";
+  // Center picked on the map: its card stays highlighted until the next click elsewhere.
+  let selectedId = null;
+  let selectedAt = 0;
+
+  function selectCard(id) {
+    selectedId = id;
+    selectedAt = Date.now();
+    document.querySelectorAll(".card.flash").forEach((c) => c.classList.remove("flash"));
+    if (id) document.querySelectorAll(`.card[data-id="${id}"]`).forEach((c) => c.classList.add("flash"));
+  }
   const byId = new Map();
   let rendered = 0;
   let tokens = [];
@@ -400,6 +410,7 @@
     if (sig !== listSig) {
       listSig = sig;
       resetCards();
+      revealSelected();
     }
     if (state.map && mapState.map) syncMarkers();
     writeUrl();
@@ -570,7 +581,7 @@
       ? `<span class="phone-raw">${toFa(escapeHtml(it.phoneText))}</span>` : "";
     const googleQ = encodeURIComponent(`${it.type} ${it.name} ${it.city}`);
 
-    return `<article class="card" data-id="${it.id}" style="--chip-c:${color}">
+    return `<article class="card${it.id === selectedId ? " flash" : ""}" data-id="${it.id}" style="--chip-c:${color}">
       <div class="card-top">
         <span class="type-icon">${icon(ic)}</span>
         <div class="card-title">
@@ -590,6 +601,17 @@
         ${it.address ? `<button type="button" class="btn ghost" data-copy="${escapeHtml(it.address)}" title="کپی آدرس">${icon("copy")}کپی آدرس</button>` : ""}
       </div>
     </article>`;
+  }
+
+  // After the list reloads (e.g. the map moved to show a popup), keep the selected card on
+  // the page, and bring it back into view if it was picked a moment ago.
+  function revealSelected() {
+    const it = selectedId && byId.get(selectedId);
+    const idx = it ? filtered.indexOf(it) : -1;
+    if (idx < 0) return;
+    while (idx >= rendered && rendered < filtered.length) renderMore();
+    const cardEl = el.cards.querySelector(`.card[data-id="${selectedId}"]`);
+    if (cardEl && Date.now() - selectedAt < 2500) cardEl.scrollIntoView({ block: "nearest" });
   }
 
   function resetCards() {
@@ -830,21 +852,23 @@
       showPreview(it);
       return;
     }
-    marker.unbindPopup();
-    marker.bindPopup(popupHtml(it), { maxWidth: 300 }).openPopup();
-    // Leaflet keeps clicks inside popups from reaching the page, so bind the admin button here.
-    const editBtn = ADMIN && marker.getPopup().getElement().querySelector("[data-edit]");
-    if (editBtn) editBtn.addEventListener("click", () => { marker.closePopup(); editLocation(it.id); });
     if (fromMap) {
-      // Load more of the list until the clicked center's card exists, then show it.
+      // Highlight the card first, so it happens even if the popup cannot open right now.
       const idx = filtered.indexOf(it);
       while (idx >= rendered && rendered < filtered.length) renderMore();
       const cardEl = el.cards.querySelector(`.card[data-id="${it.id}"]`);
-      if (cardEl) {
-        cardEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
-        cardEl.classList.add("flash");
-        setTimeout(() => cardEl.classList.remove("flash"), 1600);
-      }
+      if (cardEl) cardEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      selectCard(it.id);
+    }
+    try {
+      marker.unbindPopup();
+      marker.bindPopup(popupHtml(it), { maxWidth: 300 }).openPopup();
+      // Leaflet keeps clicks inside popups from reaching the page, so bind the admin button here.
+      const editBtn = ADMIN && marker.getPopup().getElement().querySelector("[data-edit]");
+      if (editBtn) editBtn.addEventListener("click", () => { marker.closePopup(); editLocation(it.id); });
+    } catch (err) {
+      // The marker can be mid-animation inside a cluster; the next click opens it.
+      console.warn("popup:", err);
     }
   }
 
@@ -1260,6 +1284,10 @@
 
   // Cards also appear in the map preview, so handle their buttons anywhere on the page.
   document.addEventListener("click", (e) => {
+    // A click anywhere except the highlighted card, a map pin or its popup ends the highlight.
+    if (selectedId && !e.target.closest(`.card[data-id="${selectedId}"], .leaflet-marker-icon, .leaflet-popup`)) {
+      selectCard(null);
+    }
     const copyBtn = e.target.closest("[data-copy]");
     if (copyBtn) copy(copyBtn.dataset.copy);
     const locate = e.target.closest("[data-locate]");
@@ -1306,7 +1334,7 @@
   el.applyFilters.addEventListener("click", () => { closeSheet(); change(() => {}); });
   el.backdrop.addEventListener("click", closeSheet);
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") { closeMenus(); closeSheet(); hidePreview(); closeEditor(); }
+    if (e.key === "Escape") { closeMenus(); closeSheet(); hidePreview(); closeEditor(); selectCard(null); }
     if (e.key === "/" && document.activeElement !== el.q && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) {
       e.preventDefault();
       el.q.focus();
