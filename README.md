@@ -133,6 +133,9 @@ the logo, fonts or files under `assets/vendor/`, bump `CACHE` in `site/sw.js` (e
 The logo is `site/assets/logo.svg`; the PNG app icons are drawn by `make_icons.py`
 (needs Pillow: `.venv\Scripts\pip install pillow`).
 
+**When changing `site/assets/app.js` or `styles.css`,** bump the `?v=` number on their links in
+`site/index.html`, so visitors never get a new script with an old cached page.
+
 ## Admin mode: fixing a location by hand
 
 1. **One-time setup** – create a GitHub token: GitHub → Settings → Developer settings →
@@ -164,6 +167,11 @@ recomputed whenever the data is saved, so they follow admin location edits autom
 A check of 30 random centers against Neshan's own district number agreed on 29 (the other
 was on the district 3/4 border). Centers whose point is outside the 22 districts have no
 district (several are addresses in other towns such as اسلامشهر, قرچک or فردیس).
+On the site, choosing the city «تهران» shows a «محدوده» dropdown: directions (شمال, شمال‌غرب,
+…, groups of districts defined in `DIRECTIONS` in `site/assets/app.js`) and the 22 districts,
+with counts. The selected area is outlined on the map, and the map's «مناطق» button shows all
+district outlines (click one to select it). The browser recomputes districts from the
+boundaries, so admin location edits move a center to its new district immediately.
 `.venv\Scripts\python districts.py` writes `district_review.txt`: centers with no
 district, doubtful points, and centers whose district differs from most others on the same
 street (often fine on streets that form district borders).

@@ -146,6 +146,10 @@ img.brand-mark { background: none; border-radius: 12px; box-shadow: 0 2px 10px r
 .clear-q { border: 0; background: transparent; color: var(--muted); padding: 6px; border-radius: 8px; display: grid; }
 .clear-q:hover { color: var(--text); background: var(--border); }
 .location { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.location.has-area { grid-template-columns: 1fr 1fr 1fr; }
+@media (min-width: 901px) {
+  .search-panel:has(.location.has-area) { grid-template-columns: 1fr minmax(0, 600px); }
+}
 .select-wrap {
   position: relative;
   background: var(--surface-2);
@@ -468,6 +472,13 @@ body.map-mode .cards { grid-template-columns: 1fr; }
 .card.flash { box-shadow: 0 0 0 3px var(--primary), var(--shadow); }
 .dist { color: var(--primary); font-weight: 700; }
 .map-preview { display: none; }
+.areas-btn { width: auto; padding: 0 10px; font: 700 12px var(--font); }
+.areas-btn[aria-pressed="true"] { background: var(--primary); color: var(--on-primary); }
+.map-panel .district-label {
+  background: color-mix(in srgb, var(--surface) 80%, transparent); border: 0; box-shadow: none;
+  padding: 0 5px; border-radius: 6px; font: 700 11px var(--font); color: var(--text); white-space: nowrap;
+}
+.map-panel .district-label::before { display: none; }
 
 /* ---------- Install as app ---------- */
 .install-banner {
@@ -587,6 +598,8 @@ body.map-mode .cards { grid-template-columns: 1fr; }
   }
   .leaflet-bottom { bottom: 70px; }
   .map-legend { display: none; }
+  .location.has-area { grid-template-columns: 1fr 1fr; }
+  .location.has-area .area-wrap { grid-column: 1 / -1; }
   .edit-panel { top: auto; bottom: calc(84px + env(safe-area-inset-bottom)); right: 12px; left: 12px; width: auto; max-height: 50vh; }
   .fab-badge { background: var(--primary); color: var(--on-primary); border-radius: 999px; min-width: 22px; height: 22px; padding: 0 6px; font-size: 12px; display: grid; place-items: center; }
   .site-footer { padding-bottom: 90px; }

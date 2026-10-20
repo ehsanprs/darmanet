@@ -16,7 +16,7 @@
   <meta name="apple-mobile-web-app-title" content="درمانت">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="preload" href="assets/fonts/Vazirmatn-wght.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="assets/styles.css">
+  <link rel="stylesheet" href="assets/styles.css?v=9">
 </head>
 <body>
   <a class="skip-link" href="#results">رفتن به نتایج</a>
@@ -49,6 +49,10 @@
           <label class="select-wrap">
             <span class="select-label">شهرستان</span>
             <select id="city"></select>
+          </label>
+          <label class="select-wrap area-wrap" id="areaWrap" hidden>
+            <span class="select-label">محدوده</span>
+            <select id="area"></select>
           </label>
         </div>
       </form>
@@ -205,6 +209,6 @@
   </div>
 
   <script src="data/centers.js"></script>
-  <script src="assets/app.js"></script>
+  <script src="assets/app.js?v=9"></script>
 </body>
 </html>

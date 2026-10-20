@@ -49,6 +49,7 @@
   const $ = (id) => document.getElementById(id);
   const el = {
     q: $("q"), clearQ: $("clearQ"), province: $("province"), city: $("city"),
+    area: $("area"), areaWrap: $("areaWrap"), location: document.querySelector(".location"),
     typeChips: $("typeChips"), serviceChips: $("serviceChips"), typeList: $("typeList"),
     insuranceList: $("insuranceList"),
     onlineOnly: $("onlineOnly"), phoneOnly: $("phoneOnly"), allDayOnly: $("allDayOnly"),
@@ -73,6 +74,79 @@
   // Shown first in the province / city lists; everything else stays alphabetical.
   const PROVINCES_FIRST = ["تهران", "قزوین"];
   const CITIES_FIRST = { "تهران": ["تهران"], "قزوین": ["قزوین"] };
+  // ---------- Tehran areas: directions = fixed groups of the 22 municipal districts ----------
+  const TEHRAN = "تهران";
+  const DIRECTIONS = [
+    ["n", "شمال", [1, 3]], ["nw", "شمال‌غرب", [2, 5, 22]], ["ne", "شمال‌شرق", [4, 8]],
+    ["w", "غرب", [9, 18, 21]], ["c", "مرکز", [6, 7, 10, 11, 12]], ["e", "شرق", [13, 14]],
+    ["sw", "جنوب‌غرب", [17, 19]], ["s", "جنوب", [16]], ["se", "جنوب‌شرق", [15, 20]],
+  ].map(([key, label, d]) => ({ key, label, d: new Set(d) }));
+
+  const isTehranCity = () => state.province === TEHRAN && state.city === TEHRAN;
+
+  // state.area is "g:<direction>" or "d:<district number>".
+  function areaDistricts(area) {
+    if (!area) return null;
+    const [kind, v] = area.split(":");
+    if (kind === "d") return new Set([+v]);
+    const g = DIRECTIONS.find((x) => x.key === v);
+    return g ? g.d : null;
+  }
+
+  function areaLabel(area) {
+    const [kind, v] = area.split(":");
+    return kind === "d" ? `منطقه ${toFa(v)}` : (DIRECTIONS.find((x) => x.key === v) || {}).label || "";
+  }
+
+  // District boundaries (OpenStreetMap). Until they load, the district stored in the data is used;
+  // once loaded, districts follow the current map points (including admin edits).
+  let districtGeo = null;
+  let districtLoading = null;
+
+  function loadDistricts() {
+    districtLoading = districtLoading || fetch("data/tehran_districts.json")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((geo) => {
+        if (!geo) return null;
+        geo.features.forEach((f) => {
+          const pts = f.geometry.coordinates.flat(2);
+          f.bbox = [Math.min(...pts.map((p) => p[0])), Math.min(...pts.map((p) => p[1])),
+            Math.max(...pts.map((p) => p[0])), Math.max(...pts.map((p) => p[1]))];
+        });
+        districtGeo = geo;
+        items.forEach(setDistrict);
+        return geo;
+      })
+      .catch(() => null);
+    return districtLoading;
+  }
+
+  function inRing(x, y, ring) {
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i];
+      const [xj, yj] = ring[j];
+      if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  }
+
+  function districtAt(lat, lng) {
+    for (const f of districtGeo.features) {
+      const [x0, y0, x1, y1] = f.bbox;
+      if (lng < x0 || lng > x1 || lat < y0 || lat > y1) continue;
+      if (f.geometry.coordinates.some((poly) => inRing(lng, lat, poly[0]) &&
+        !poly.slice(1).some((hole) => inRing(lng, lat, hole)))) return f.properties.n;
+    }
+    return null;
+  }
+
+  function setDistrict(it) {
+    if (!districtGeo) return;
+    it.district = it.province === TEHRAN && it.city === TEHRAN && it.location
+      ? districtAt(it.location.lat, it.location.lng) : undefined;
+  }
+
   const pinnedFirst = (first) => (a, b) => {
     const ia = first.indexOf(a);
     const ib = first.indexOf(b);
@@ -188,7 +262,7 @@
   const state = {
     q: "", province: "", city: "", cat: "", svcs: new Set(), ins: "",
     online: false, phone: false, allDay: false, sort: "relevance",
-    map: false, bounds: null, near: null,
+    map: false, bounds: null, near: null, area: "",
     locSrc: "", // admin only: "" | "manual" | "auto" | "none"
   };
   let items = [];
@@ -218,6 +292,7 @@
     state.q = p.get("q") || "";
     state.province = p.get("p") || "";
     state.city = p.get("c") || "";
+    state.area = p.get("a") || "";
     state.cat = CAT.has(p.get("cat")) ? p.get("cat") : "";
     state.svcs = new Set((p.get("sv") || "").split("|").filter((k) => SVC.has(k) && SVC.get(k).cat === state.cat));
     state.allDay = p.get("h") === "1";
@@ -244,6 +319,7 @@
     if (state.q) p.set("q", state.q);
     if (state.province) p.set("p", state.province);
     if (state.city) p.set("c", state.city);
+    if (state.area && isTehranCity()) p.set("a", state.area);
     if (state.cat) p.set("cat", state.cat);
     if (state.svcs.size) p.set("sv", [...state.svcs].join("|"));
     if (state.allDay) p.set("h", "1");
@@ -347,6 +423,9 @@
       src: { all: 0, manual: 0, auto: 0, none: 0 },
     };
     const out = [];
+    const areaSet = isTehranCity() ? areaDistricts(state.area) : null;
+    counts.dist = new Map();
+    counts.areaAll = 0;
 
     for (const it of items) {
       let score = 0;
@@ -372,9 +451,11 @@
       const fh = !state.allDay || it.allDay;
       const src = locSource(it);
       const fls = !state.locSrc || src === state.locSrc;
-      const rest = fi && fo && fph && fh && fls;
+      const fa = !areaSet || areaSet.has(it.district);
+      const base = fi && fo && fph && fh && fls; // every filter except place and area
+      const rest = base && fa;
 
-      if (ft && rest) {
+      if (ft && base) {
         counts.province.set(it.province, (counts.province.get(it.province) || 0) + 1);
         if (fp) counts.city.set(it.city, (counts.city.get(it.city) || 0) + 1);
       }
@@ -384,17 +465,21 @@
           for (const k of it._cats) counts.cat.set(k, (counts.cat.get(k) || 0) + 1);
           if (fcat) for (const k of it._svcs) counts.svc.set(k, (counts.svc.get(k) || 0) + 1);
         }
-        if (ft && fi && fo && fph && fh) {
+        if (ft && base) {
+          counts.areaAll++;
+          if (it.district) counts.dist.set(it.district, (counts.dist.get(it.district) || 0) + 1);
+        }
+        if (ft && fi && fo && fph && fh && fa) {
           counts.src.all++;
           counts.src[src]++;
         }
-        if (ft && fo && fph && fh && fls) {
+        if (ft && fo && fph && fh && fls && fa) {
           counts.insAll++;
           for (const k of it._ins) counts.ins.set(k, (counts.ins.get(k) || 0) + 1);
         }
-        if (ft && fi && fph && fh && fls && it.onlineReferral === true) counts.online++;
-        if (ft && fi && fo && fh && fls && it.phones.length) counts.phone++;
-        if (ft && fi && fo && fph && fls && it.allDay) counts.allDay++;
+        if (ft && fi && fph && fh && fls && fa && it.onlineReferral === true) counts.online++;
+        if (ft && fi && fo && fh && fls && fa && it.phones.length) counts.phone++;
+        if (ft && fi && fo && fph && fls && fa && it.allDay) counts.allDay++;
         if (ft && rest) out.push(it);
       }
     }
@@ -440,6 +525,20 @@
     } else {
       el.city.disabled = true;
       el.city.innerHTML = `<option value="">ابتدا استان را انتخاب کنید</option>`;
+    }
+
+    // «محدوده»: only for the city of Tehran (directions, then the 22 districts).
+    const showArea = isTehranCity() && !!el.area; // an older cached page has no «محدوده» box
+    if (el.areaWrap) el.areaWrap.hidden = !showArea;
+    el.location.classList.toggle("has-area", showArea);
+    if (showArea) {
+      const sel = (v) => (state.area === v ? " selected" : "");
+      const groupN = (g) => [...g.d].reduce((sum, d) => sum + (c.dist.get(d) || 0), 0);
+      el.area.innerHTML = `<option value="">همه محدوده‌ها (${faNum(c.areaAll)})</option>
+        <optgroup label="جهت">${DIRECTIONS.map((g) =>
+          `<option value="g:${g.key}"${sel(`g:${g.key}`)}>${g.label} (${faNum(groupN(g))})</option>`).join("")}</optgroup>
+        <optgroup label="منطقه شهرداری">${Array.from({ length: 22 }, (_, i) => i + 1).map((n) =>
+          `<option value="d:${n}"${sel(`d:${n}`)}>منطقه ${toFa(n)} (${faNum(c.dist.get(n) || 0)})</option>`).join("")}</optgroup>`;
     }
 
     // Category chips (pick one), then the chosen category's service chips (pick any).
@@ -520,8 +619,9 @@
     const pills = [];
     const add = (label, fn) => pills.push({ label, fn });
     if (state.q) add(`«${state.q}»`, () => { state.q = ""; el.q.value = ""; syncClear(); });
-    if (state.province) add(state.province, () => { state.province = ""; state.city = ""; });
-    if (state.city) add(state.city, () => { state.city = ""; });
+    if (state.province) add(state.province, () => { state.province = ""; state.city = ""; state.area = ""; });
+    if (state.city) add(state.city === state.province ? `شهر ${state.city}` : state.city, () => { state.city = ""; state.area = ""; });
+    if (state.area && isTehranCity()) add(areaLabel(state.area), () => { state.area = ""; });
     if (state.cat) add(catStyle(state.cat).label, () => { state.cat = ""; state.svcs.clear(); });
     state.svcs.forEach((k) => add(SVC.get(k).label, () => state.svcs.delete(k)));
     if (state.allDay) add("شبانه‌روزی", () => { state.allDay = false; });
@@ -538,6 +638,7 @@
       `<button type="button" class="pill" data-i="${i}" aria-label="حذف فیلتر ${escapeHtml(p.label)}">${escapeHtml(p.label)}${icon("x", "")}</button>`).join("");
 
     const extra = (state.cat ? 1 : 0) + state.svcs.size + (state.ins ? 1 : 0) + (state.locSrc ? 1 : 0) +
+      (state.area && isTehranCity() ? 1 : 0) +
       (state.online ? 1 : 0) + (state.phone ? 1 : 0) + (state.allDay ? 1 : 0);
     el.filterBadge.hidden = !extra;
     el.filterBadge.textContent = toFa(extra);
@@ -710,7 +811,7 @@
 
   // Every filter that changes which centers match must be listed here, or the map keeps old pins.
   const filterSig = () => [state.q, state.province, state.city, state.cat, [...state.svcs].join(","),
-    state.ins, state.online, state.phone, state.allDay, state.locSrc].join("|");
+    state.ins, state.online, state.phone, state.allDay, state.locSrc, state.area].join("|");
 
   function mapBounds() {
     const b = mapState.map.getBounds();
@@ -764,6 +865,22 @@
     });
     map.addControl(new Locate());
 
+    // «مناطق»: show all 22 Tehran district outlines; clicking one selects it.
+    const Areas = L.Control.extend({
+      options: { position: "topleft" },
+      onAdd() {
+        const b = L.DomUtil.create("button", "locate-btn areas-btn leaflet-bar");
+        b.type = "button";
+        b.textContent = "مناطق";
+        b.title = "نمایش مناطق ۲۲‌گانه تهران";
+        b.setAttribute("aria-pressed", "false");
+        L.DomEvent.disableClickPropagation(b);
+        L.DomEvent.on(b, "click", () => toggleDistrictLayer(b));
+        return b;
+      },
+    });
+    map.addControl(new Areas());
+
     map.on("moveend", onMapMove);
     map.on("click", hidePreview);
     mapState.map = map;
@@ -810,11 +927,59 @@
       }
       mapState.cluster.addLayers(layers);
     }
+    drawArea();
     if (mapState.needFit) {
       mapState.needFit = false;
       fitToResults();
     }
     updateMapCount();
+  }
+
+  // Outline of the selected direction / district.
+  function drawArea() {
+    const L = window.L;
+    const key = isTehranCity() ? state.area : "";
+    if (mapState.areaKey === key) return;
+    mapState.areaKey = key;
+    if (mapState.areaLayer) mapState.areaLayer.remove();
+    mapState.areaLayer = null;
+    const set = areaDistricts(key);
+    if (!set) return;
+    loadDistricts().then((geo) => {
+      if (!geo || mapState.areaKey !== key) return;
+      mapState.areaLayer = L.geoJSON({ type: "FeatureCollection", features: geo.features.filter((f) => set.has(f.properties.n)) }, {
+        interactive: false,
+        style: { color: "#0f766e", weight: 2.5, dashArray: "6 5", fillColor: "#14b8a6", fillOpacity: 0.07 },
+      }).addTo(mapState.map);
+    });
+  }
+
+  async function toggleDistrictLayer(btn) {
+    const L = window.L;
+    if (mapState.districtLayer) {
+      mapState.districtLayer.remove();
+      mapState.districtLayer = null;
+      btn.setAttribute("aria-pressed", "false");
+      return;
+    }
+    const geo = await loadDistricts();
+    if (!geo) return toast("مرز مناطق بارگذاری نشد");
+    btn.setAttribute("aria-pressed", "true");
+    mapState.districtLayer = L.geoJSON(geo, {
+      style: { color: "#475569", weight: 1.2, fillColor: "#64748b", fillOpacity: 0.04 },
+      onEachFeature: (f, layer) => {
+        layer.bindTooltip(`منطقه ${toFa(f.properties.n)}`, { permanent: true, direction: "center", className: "district-label" });
+        layer.on("click", () => change(() => {
+          state.province = TEHRAN;
+          state.city = TEHRAN;
+          state.area = `d:${f.properties.n}`;
+          refit();
+        }, false));
+      },
+    }).addTo(mapState.map);
+    if (!mapState.map.getBounds().intersects(mapState.districtLayer.getBounds())) {
+      moveMap((m) => m.fitBounds(mapState.districtLayer.getBounds()));
+    }
   }
 
   function fitToResults() {
@@ -1182,6 +1347,7 @@
         await saveManual(it, p.lat, p.lng);
         it.location = { lat: +p.lat.toFixed(6), lng: +p.lng.toFixed(6) };
         it.geocode = { source: "manual", at: new Date().toISOString().slice(0, 10) };
+        setDistrict(it);
         const old = mapState.markers.get(it.id);
         if (old) mapState.cluster.removeLayer(old);
         mapState.markers.delete(it.id);
@@ -1222,8 +1388,9 @@
     state.bounds = null;
     el.searchArea.hidden = true;
   };
-  el.province.addEventListener("change", () => change(() => { state.province = el.province.value; state.city = ""; refit(); }));
-  el.city.addEventListener("change", () => change(() => { state.city = el.city.value; refit(); }));
+  el.province.addEventListener("change", () => change(() => { state.province = el.province.value; state.city = ""; state.area = ""; refit(); }));
+  el.city.addEventListener("change", () => change(() => { state.city = el.city.value; state.area = ""; refit(); }));
+  if (el.area) el.area.addEventListener("change", () => change(() => { state.area = el.area.value; refit(); }));
   el.sort.addEventListener("change", () => {
     if (el.sort.value === "near" && !state.near) {
       state.sort = "near";
@@ -1273,7 +1440,7 @@
   });
 
   const resetAll = () => change(() => {
-    Object.assign(state, { q: "", province: "", city: "", cat: "", ins: "", online: false, phone: false, allDay: false, bounds: null, locSrc: "" });
+    Object.assign(state, { q: "", province: "", city: "", cat: "", ins: "", online: false, phone: false, allDay: false, bounds: null, locSrc: "", area: "" });
     if (state.map) mapState.needFit = true;
     state.svcs.clear();
     el.q.value = "";
@@ -1458,6 +1625,7 @@
     syncClear();
     apply();
     if (state.map) openMap();
+    loadDistricts().then((geo) => { if (geo && isTehranCity()) apply(); });
   }).catch((err) => {
     console.error(err);
     el.cards.innerHTML = "";
