@@ -53,6 +53,7 @@
     insuranceList: $("insuranceList"),
     onlineOnly: $("onlineOnly"), phoneOnly: $("phoneOnly"), allDayOnly: $("allDayOnly"),
     onlineCount: $("onlineCount"), phoneCount: $("phoneCount"), allDayCount: $("allDayCount"),
+    locSrcGroup: $("locSrcGroup"), locSrcList: $("locSrcList"),
     resultCount: $("resultCount"), activeFilters: $("activeFilters"),
     cards: $("cards"), sentinel: $("sentinel"), empty: $("empty"),
     sort: $("sort"), filters: $("filters"), backdrop: $("backdrop"),
@@ -104,6 +105,12 @@
     return g.approx ? "approx" : "ok";
   }
 
+  // Where a center's map point came from: set by hand (admin), found automatically, or none.
+  function locSource(it) {
+    if (!it.location) return "none";
+    return (it.geocode || {}).source === "manual" ? "manual" : "auto";
+  }
+
   function suspectText(it) {
     const s = it.geocode.suspect;
     return `آدرس این مرکز در «${s.area}» است، اما نقطه ثبت‌شده روی نقشه حدود ${toFa(Math.round(s.km))} کیلومتر دورتر است.`;
@@ -127,6 +134,7 @@
     const quality = locQuality(it);
     const approx = quality !== "ok";
     const links = [
+      ["جستجوی نام در Google Maps", nameSearchUrl(it)],
       ...(approx ? [["جستجوی آدرس در Google Maps", addressSearchUrl(it)]] : []),
       ["Google Maps", `https://www.google.com/maps/dir/?api=1&destination=${ll}`],
       ["بلد", `https://balad.ir/location?latitude=${lat}&longitude=${lng}&zoom=17`],
@@ -181,6 +189,7 @@
     q: "", province: "", city: "", cat: "", svcs: new Set(), ins: "",
     online: false, phone: false, allDay: false, sort: "relevance",
     map: false, bounds: null, near: null,
+    locSrc: "", // admin only: "" | "manual" | "auto" | "none"
   };
   let items = [];
   let filtered = [];
@@ -325,6 +334,7 @@
     const counts = {
       province: new Map(), city: new Map(), cat: new Map(), svc: new Map(),
       ins: new Map(), insAll: 0, online: 0, phone: 0, allDay: 0, catAll: 0,
+      src: { all: 0, manual: 0, auto: 0, none: 0 },
     };
     const out = [];
 
@@ -350,7 +360,9 @@
       const fo = !state.online || it.onlineReferral === true;
       const fph = !state.phone || it.phones.length > 0;
       const fh = !state.allDay || it.allDay;
-      const rest = fi && fo && fph && fh;
+      const src = locSource(it);
+      const fls = !state.locSrc || src === state.locSrc;
+      const rest = fi && fo && fph && fh && fls;
 
       if (ft && rest) {
         counts.province.set(it.province, (counts.province.get(it.province) || 0) + 1);
@@ -362,13 +374,17 @@
           for (const k of it._cats) counts.cat.set(k, (counts.cat.get(k) || 0) + 1);
           if (fcat) for (const k of it._svcs) counts.svc.set(k, (counts.svc.get(k) || 0) + 1);
         }
-        if (ft && fo && fph && fh) {
+        if (ft && fi && fo && fph && fh) {
+          counts.src.all++;
+          counts.src[src]++;
+        }
+        if (ft && fo && fph && fh && fls) {
           counts.insAll++;
           for (const k of it._ins) counts.ins.set(k, (counts.ins.get(k) || 0) + 1);
         }
-        if (ft && fi && fph && fh && it.onlineReferral === true) counts.online++;
-        if (ft && fi && fo && fh && it.phones.length) counts.phone++;
-        if (ft && fi && fo && fph && it.allDay) counts.allDay++;
+        if (ft && fi && fph && fh && fls && it.onlineReferral === true) counts.online++;
+        if (ft && fi && fo && fh && fls && it.phones.length) counts.phone++;
+        if (ft && fi && fo && fph && fls && it.allDay) counts.allDay++;
         if (ft && rest) out.push(it);
       }
     }
@@ -460,6 +476,15 @@
             <span class="lbl">${escapeHtml(o.label)}</span><span class="count">${faNum(o.n)}</span>
           </label>`).join("");
 
+    if (ADMIN) {
+      el.locSrcGroup.hidden = false;
+      el.locSrcList.innerHTML = [["", "همه", c.src.all], ["manual", "ویرایش دستی", c.src.manual],
+        ["auto", "نشان (خودکار)", c.src.auto], ["none", "بدون موقعیت", c.src.none]]
+        .map(([key, label, n]) => `<label class="opt">
+            <input type="radio" name="locSrc" value="${key}"${state.locSrc === key ? " checked" : ""}>
+            <span class="lbl">${label}</span><span class="count">${faNum(n)}</span>
+          </label>`).join("");
+    }
     el.allDayOnly.checked = state.allDay;
     el.allDayCount.textContent = `(${faNum(c.allDay)})`;
     el.onlineOnly.checked = state.online;
@@ -489,6 +514,10 @@
     if (state.cat) add(catStyle(state.cat).label, () => { state.cat = ""; state.svcs.clear(); });
     state.svcs.forEach((k) => add(SVC.get(k).label, () => state.svcs.delete(k)));
     if (state.allDay) add("شبانه‌روزی", () => { state.allDay = false; });
+    if (state.locSrc) {
+      const names = { manual: "ویرایش دستی", auto: "موقعیت خودکار نشان", none: "بدون موقعیت" };
+      add(`منبع: ${names[state.locSrc]}`, () => { state.locSrc = ""; });
+    }
     if (state.bounds && mobile.matches) add("محدوده انتخاب‌شده روی نقشه", () => { state.bounds = null; });
     if (state.ins) add(`بیمه ${state.ins}`, () => { state.ins = ""; });
     if (state.online) add("معرفی‌نامه آنلاین", () => { state.online = false; });
@@ -497,7 +526,7 @@
     el.activeFilters.innerHTML = pills.map((p, i) =>
       `<button type="button" class="pill" data-i="${i}" aria-label="حذف فیلتر ${escapeHtml(p.label)}">${escapeHtml(p.label)}${icon("x", "")}</button>`).join("");
 
-    const extra = (state.cat ? 1 : 0) + state.svcs.size + (state.ins ? 1 : 0) +
+    const extra = (state.cat ? 1 : 0) + state.svcs.size + (state.ins ? 1 : 0) + (state.locSrc ? 1 : 0) +
       (state.online ? 1 : 0) + (state.phone ? 1 : 0) + (state.allDay ? 1 : 0);
     el.filterBadge.hidden = !extra;
     el.filterBadge.textContent = toFa(extra);
@@ -526,6 +555,7 @@
       tags.push(`<span class="tag unknown" title="نوع خدمات این مرکز در منبع ذکر نشده است؛ تماس بگیرید">خدمات مشخص نشده</span>`);
     }
     if (it.allDay) tags.push(`<span class="tag ok">شبانه‌روزی</span>`);
+    if (ADMIN && locSource(it) === "manual") tags.unshift(`<span class="tag ok" title="موقعیت این مرکز را مدیر تنظیم کرده است">✓ ویرایش دستی</span>`);
     if (it.location && locQuality(it) === "suspect") {
       tags.unshift(`<span class="tag warn loc-warn" title="${escapeHtml(suspectText(it))}">⚠ موقعیت روی نقشه احتمالاً نادرست</span>`);
     }
@@ -787,7 +817,7 @@
           : locQuality(it) === "approx" ? '<div class="muted">موقعیت تقریبی است</div>' : ""}
         <div class="pop-actions">
           ${phone ? `<a class="call" href="tel:${phone}">تماس ${toFa(formatPhone(phone))}</a>` : ""}
-          ${locQuality(it) === "ok" ? "" : `<a class="ghost" href="${addressSearchUrl(it)}" target="_blank" rel="noopener">جستجوی آدرس</a>`}
+          <a class="ghost" href="${nameSearchUrl(it)}" target="_blank" rel="noopener">جستجو در Google Maps</a>
           <a class="ghost" href="https://www.google.com/maps/dir/?api=1&destination=${ll}" target="_blank" rel="noopener">مسیریابی</a>
           ${ADMIN ? `<button type="button" class="ghost admin-edit" data-edit="${it.id}">ویرایش موقعیت</button>` : ""}
         </div>
@@ -1181,6 +1211,7 @@
   el.allDayOnly.addEventListener("change", () => change(() => { state.allDay = el.allDayOnly.checked; }, !mobile.matches));
   el.phoneOnly.addEventListener("change", () => change(() => { state.phone = el.phoneOnly.checked; }, !mobile.matches));
   el.insuranceList.addEventListener("change", (e) => change(() => { state.ins = e.target.value; }, !mobile.matches));
+  el.locSrcList.addEventListener("change", (e) => change(() => { state.locSrc = e.target.value; }, !mobile.matches));
 
   const selectCat = (key) => {
     state.cat = state.cat === key ? "" : key;
@@ -1217,7 +1248,7 @@
   });
 
   const resetAll = () => change(() => {
-    Object.assign(state, { q: "", province: "", city: "", cat: "", ins: "", online: false, phone: false, allDay: false, bounds: null });
+    Object.assign(state, { q: "", province: "", city: "", cat: "", ins: "", online: false, phone: false, allDay: false, bounds: null, locSrc: "" });
     if (state.map) mapState.needFit = true;
     state.svcs.clear();
     el.q.value = "";
