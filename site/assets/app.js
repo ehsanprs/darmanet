@@ -69,6 +69,15 @@
   const toFa = (s) => String(s).replace(/\d/g, (d) => FA_DIGITS[d]);
   const faNum = (n) => toFa(n.toLocaleString("en-US").replace(/,/g, "٬"));
   const collator = new Intl.Collator("fa");
+  // Shown first in the province / city lists; everything else stays alphabetical.
+  const PROVINCES_FIRST = ["تهران", "قزوین"];
+  const CITIES_FIRST = { "تهران": ["تهران"], "قزوین": ["قزوین"] };
+  const pinnedFirst = (first) => (a, b) => {
+    const ia = first.indexOf(a);
+    const ib = first.indexOf(b);
+    if (ia !== -1 || ib !== -1) return (ia === -1 ? Infinity : ia) - (ib === -1 ? Infinity : ib);
+    return collator.compare(a, b);
+  };
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   const icon = (name, cls = "icon") =>
@@ -390,13 +399,14 @@
 
   // ---------- Facets ----------
   function renderFacets(c) {
-    const all = [...new Set(items.map((i) => i.province))].sort(collator.compare);
+    const all = [...new Set(items.map((i) => i.province))].sort(pinnedFirst(PROVINCES_FIRST));
     const total = [...c.province.values()].reduce((a, b) => a + b, 0);
     el.province.innerHTML = `<option value="">همه استان‌ها (${faNum(total)})</option>` +
       all.map((p) => `<option value="${escapeHtml(p)}"${p === state.province ? " selected" : ""}>${escapeHtml(p)} (${faNum(c.province.get(p) || 0)})</option>`).join("");
 
     if (state.province) {
-      const cities = [...new Set(items.filter((i) => i.province === state.province).map((i) => i.city))].sort(collator.compare);
+      const cities = [...new Set(items.filter((i) => i.province === state.province).map((i) => i.city))]
+        .sort(pinnedFirst(CITIES_FIRST[state.province] || []));
       el.city.disabled = false;
       el.city.innerHTML = `<option value="">همه شهرها</option>` +
         cities.map((x) => `<option value="${escapeHtml(x)}"${x === state.city ? " selected" : ""}>${escapeHtml(x)} (${faNum(c.city.get(x) || 0)})</option>`).join("");
